@@ -33,6 +33,48 @@ export function criarTexturaMadeira(cena: Phaser.Scene, chave = 'madeira'): void
   g.destroy()
 }
 
+export function createTestItemTexture(scene: Phaser.Scene, key = 'test-item-icon'): void {
+  const g = scene.add.graphics()
+
+  g.fillStyle(0x6fd1e6, 1)
+  g.fillCircle(12, 12, 9)
+  g.fillStyle(0xd7f6ff, 1)
+  g.fillCircle(9, 9, 3)
+  g.lineStyle(2, 0x2a7a8c, 1)
+  g.strokeCircle(12, 12, 9)
+
+  g.generateTexture(key, 24, 24)
+  g.destroy()
+}
+
+export function createNumberItemTexture(scene: Phaser.Scene, value: number, key: string): void {
+  const size = 24
+  const canvasTexture = scene.textures.createCanvas(key, size, size)!
+  const ctx = canvasTexture.getContext()
+  const radius = 4
+
+  ctx.beginPath()
+  ctx.moveTo(radius, 0)
+  ctx.arcTo(size, 0, size, size, radius)
+  ctx.arcTo(size, size, 0, size, radius)
+  ctx.arcTo(0, size, 0, 0, radius)
+  ctx.arcTo(0, 0, size, 0, radius)
+  ctx.closePath()
+  ctx.fillStyle = '#f2ece0'
+  ctx.fill()
+  ctx.lineWidth = 2
+  ctx.strokeStyle = '#2f2f3a'
+  ctx.stroke()
+
+  ctx.fillStyle = '#1a1208'
+  ctx.font = 'bold 14px monospace'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(String(value), size / 2, size / 2 + 1)
+
+  canvasTexture.refresh()
+}
+
 export function criarTexturaJogador(cena: Phaser.Scene, chave = 'jogador'): void {
   const g = cena.add.graphics()
 
