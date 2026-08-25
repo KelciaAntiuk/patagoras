@@ -26,43 +26,11 @@ export class InventorySystem extends Phaser.Events.EventEmitter {
     return this.slots.some((slot) => slot?.item.id === itemId)
   }
 
-  add(item: ItemDefinition, quantity = 1): boolean {
-    let remaining = quantity
+  add(item: ItemDefinition): boolean {
+    const emptyIndex = this.slots.findIndex((slot) => slot === null)
+    if (emptyIndex === -1) return false
 
-    if (item.stackable) {
-      for (const slot of this.slots) {
-        if (remaining <= 0) break
-        if (slot && slot.item.id === item.id) {
-          const space = item.maxQuantity - slot.quantity
-          const amountToAdd = Math.min(space, remaining)
-          slot.quantity += amountToAdd
-          remaining -= amountToAdd
-        }
-      }
-    }
-
-    while (remaining > 0) {
-      const emptyIndex = this.slots.findIndex((slot) => slot === null)
-      if (emptyIndex === -1) break
-
-      const amountToAdd = item.stackable ? Math.min(remaining, item.maxQuantity) : 1
-      this.slots[emptyIndex] = { item, quantity: amountToAdd }
-      remaining -= amountToAdd
-    }
-
-    this.emitChange()
-    return remaining <= 0
-  }
-
-  remove(index: number, quantity = 1): boolean {
-    const slot = this.slots[index]
-    if (!slot) return false
-
-    slot.quantity -= quantity
-    if (slot.quantity <= 0) {
-      this.slots[index] = null
-    }
-
+    this.slots[emptyIndex] = { item }
     this.emitChange()
     return true
   }

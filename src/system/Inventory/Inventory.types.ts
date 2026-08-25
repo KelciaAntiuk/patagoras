@@ -13,8 +13,6 @@ interface BaseItemDefinition {
   readonly name: string
   readonly description: string
   readonly textureKey: string
-  readonly stackable: boolean
-  readonly maxQuantity: number
 }
 
 export interface GenericItemDefinition extends BaseItemDefinition {
@@ -34,7 +32,6 @@ export type ItemDefinition = GenericItemDefinition | NumberItemDefinition | Food
 
 export interface ItemStack {
   readonly item: ItemDefinition
-  quantity: number
 }
 
 export type InventorySlot = ItemStack | null

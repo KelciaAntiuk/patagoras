@@ -1,12 +1,8 @@
 import type { NumberItemDefinition } from './Inventory.types'
 import { ItemKind } from './Inventory.types'
-import { applyItemDefaults } from './Item'
 
-export function createNumberItem(
-  def: Partial<Pick<NumberItemDefinition, 'stackable' | 'maxQuantity'>> &
-    Omit<NumberItemDefinition, 'kind' | 'stackable' | 'maxQuantity'>,
-): NumberItemDefinition {
-  return Object.freeze({ ...applyItemDefaults(def), kind: ItemKind.Number })
+export function createNumberItem(def: Omit<NumberItemDefinition, 'kind'>): NumberItemDefinition {
+  return Object.freeze({ ...def, kind: ItemKind.Number })
 }
 
 export const NUMBER_ITEM_THREE: NumberItemDefinition = createNumberItem({
