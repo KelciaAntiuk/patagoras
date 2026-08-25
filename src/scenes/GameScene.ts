@@ -9,6 +9,18 @@ import { InventoryUI } from '../ui/Inventory/InventoryUI'
 
 const VELOCIDADE = 180
 
+const DROP_DIRECTIONS = [
+  { x: 0, y: 1 },
+  { x: 0, y: -1 },
+  { x: 1, y: 0 },
+  { x: -1, y: 0 },
+  { x: 1, y: 1 },
+  { x: -1, y: 1 },
+  { x: 1, y: -1 },
+  { x: -1, y: -1 },
+]
+const DROP_DISTANCES = [20, 32, 48, 64]
+
 type WorldItem = Phaser.Types.Physics.Arcade.SpriteWithDynamicBody
 
 export class GameScene extends Phaser.Scene {
@@ -161,7 +173,32 @@ export class GameScene extends Phaser.Scene {
     const removed = this.inventory.removeAll(index)
     if (!removed) return
 
-    this.spawnWorldItem(removed.item, removed.quantity, this.jogador.x, this.jogador.y + 20)
+    const { x, y } = this.findFreeDropSpot(this.itemFootprint(removed.item))
+    this.spawnWorldItem(removed.item, removed.quantity, x, y)
+  }
+
+  private findFreeDropSpot(itemSize: number): { x: number; y: number } {
+    for (const distance of DROP_DISTANCES) {
+      for (const direction of DROP_DIRECTIONS) {
+        const x = this.jogador.x + direction.x * distance
+        const y = this.jogador.y + direction.y * distance
+        if (!this.overlapsWall(x, y, itemSize)) return { x, y }
+      }
+    }
+
+    return { x: this.jogador.x, y: this.jogador.y }
+  }
+
+  private overlapsWall(x: number, y: number, size: number): boolean {
+    const half = size / 2
+    return PAREDES.some(
+      (p) => x + half > p.x && x - half < p.x + p.w && y + half > p.y && y - half < p.y + p.h,
+    )
+  }
+
+  private itemFootprint(item: ItemDefinition): number {
+    const frame = this.textures.getFrame(item.textureKey)
+    return frame ? Math.max(frame.width, frame.height) : 24
   }
 
   private spawnWorldItem(item: ItemDefinition, quantity: number, x: number, y: number): WorldItem {
