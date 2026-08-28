@@ -33,7 +33,7 @@ export class InventorySlotUI extends Phaser.GameObjects.Container {
 
     this.border.setStrokeStyle(2, FILLED_BORDER_COLOR)
 
-    this.icon = this.scene.add.image(0, 0, slot.item.textureKey).setDisplaySize(34, 34)
+    this.icon = this.scene.add.image(0, 0, slot.textureKey).setDisplaySize(34, 34)
     this.add(this.icon)
   }
 }

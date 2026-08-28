@@ -30,11 +30,7 @@ export interface FoodItemDefinition extends BaseItemDefinition {
 
 export type ItemDefinition = GenericItemDefinition | NumberItemDefinition | FoodItemDefinition
 
-export interface ItemStack {
-  readonly item: ItemDefinition
-}
-
-export type InventorySlot = ItemStack | null
+export type InventorySlot = ItemDefinition | null
 
 export const INVENTORY_EVENTS = {
   CHANGED: 'inventory-changed',

@@ -1,5 +1,5 @@
 import Phaser from 'phaser'
-import type { InventorySlot, ItemDefinition, ItemStack } from './Inventory.types'
+import type { InventorySlot, ItemDefinition } from './Inventory.types'
 import { INVENTORY_EVENTS } from './Inventory.types'
 
 export class InventorySystem extends Phaser.Events.EventEmitter {
@@ -15,7 +15,7 @@ export class InventorySystem extends Phaser.Events.EventEmitter {
   }
 
   getSlots(): readonly InventorySlot[] {
-    return this.slots.map((slot) => (slot ? { ...slot } : null))
+    return [...this.slots]
   }
 
   isFull(): boolean {
@@ -23,19 +23,19 @@ export class InventorySystem extends Phaser.Events.EventEmitter {
   }
 
   has(itemId: string): boolean {
-    return this.slots.some((slot) => slot?.item.id === itemId)
+    return this.slots.some((slot) => slot?.id === itemId)
   }
 
   add(item: ItemDefinition): boolean {
     const emptyIndex = this.slots.findIndex((slot) => slot === null)
     if (emptyIndex === -1) return false
 
-    this.slots[emptyIndex] = { item }
+    this.slots[emptyIndex] = item
     this.emitChange()
     return true
   }
 
-  removeAll(index: number): ItemStack | null {
+  removeAll(index: number): ItemDefinition | null {
     const slot = this.slots[index]
     if (!slot) return null
 
