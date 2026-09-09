@@ -149,8 +149,50 @@ export class GameScene
         super('GameScene')
     }
 
+    preload(): void {
+        this.load.image(
+            'old-house',
+            'assets/tilesets/old house.png',
+        )
+
+        this.load.image(
+            'run-sheet',
+            'assets/tilesets/16x16 Run-Sheet.png',
+        )
+
+        this.load.tilemapTiledJSON(
+            'mapa-principal',
+            'assets/maps/mapaPrincipal.json',
+        )
+    }
+
     create(): void {
-        this.createTestMap()
+        const map =
+            this.make.tilemap({
+                key: 'mapa-principal',
+            })
+
+        const oldHouseTileset =
+            map.addTilesetImage(
+                'old house',
+                'old-house',
+            )
+
+        const runSheetTileset =
+            map.addTilesetImage(
+                '16x16 Run-Sheet',
+                'run-sheet',
+            )
+
+        map.createLayer(
+            'Camada de Blocos 1',
+            [
+                oldHouseTileset!,
+                runSheetTileset!,
+            ],
+            0,
+            0,
+        )
 
         this.createTestTextures()
 
