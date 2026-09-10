@@ -65,14 +65,12 @@ export class GameScene extends Phaser.Scene {
             Phaser.Input.Keyboard.KeyCodes.ESC,
         )
 
-        // quem abre a pausa é o ESC; a entrada no jogo vem da tela de início
         if (dados?.abrirMenu === true) this.abrirMenu()
     }
 
     private abrirMenu(): void {
         if (this.scene.isActive('MenuScene')) return
 
-        // o menu abre com ESC ainda pressionado; sem o reset ele fecharia na hora
         this.escape.reset()
 
         this.scene.launch('MenuScene')

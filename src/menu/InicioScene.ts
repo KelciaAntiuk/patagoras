@@ -3,7 +3,7 @@ import { Botao } from './botao'
 import { criarTitulo } from './titulo'
 import { montarPainel, agruparJanela } from './painel'
 import type { Janela } from './painel'
-// o Vite resolve os imports para as URLs finais e falha o build se algum sumir
+
 import fundoMenu from './backgroundMenuInicial.png'
 import btnStart from './btn-start.png'
 import btnCreditos from './btn-creditos.png'
@@ -26,7 +26,6 @@ const CREDITOS = [
   'Julian Alves',
 ]
 
-/** Tela de abertura: começar o jogo ou ver os créditos. */
 export class InicioScene extends Phaser.Scene {
   private painel!: Janela
 
@@ -52,23 +51,23 @@ export class InicioScene extends Phaser.Scene {
       this.textures.get(chave).setFilter(Phaser.Textures.FilterMode.NEAREST)
     }
 
-    // a arte é 1024x555 e o viewport 800x450: escala para cobrir e centraliza
     const fundo = this.add.image(L / 2, A / 2, 'menu-fundo')
     fundo.setScale(Math.max(L / fundo.width, A / fundo.height))
     this.add.rectangle(0, 0, L, A, 0x05080c, 0.25).setOrigin(0)
 
-    criarTitulo(this, L)
+    criarTitulo(this, L, 88, 166)
 
-    new Botao(this, L / 2, 250, 'btn-start', () => this.comecar())
-    new Botao(this, L / 2, 318, 'btn-creditos', () => this.painel.mostrar(true))
+    new Botao(this, L / 2, 262, 'btn-start', () => this.comecar())
+    new Botao(this, L / 2, 330, 'btn-creditos', () => this.painel.mostrar(true))
 
+    const yDica = 364
     const barra = this.add.graphics()
     barra.fillStyle(0x0d1218, 0.88)
-    barra.fillRoundedRect(L / 2 - 310, A - 52, 620, 32, 6)
+    barra.fillRoundedRect(L / 2 - 310, yDica, 620, 32, 6)
     barra.lineStyle(2, 0x415264, 0.9)
-    barra.strokeRoundedRect(L / 2 - 310, A - 52, 620, 32, 6)
+    barra.strokeRoundedRect(L / 2 - 310, yDica, 620, 32, 6)
     this.add
-      .text(L / 2, A - 36, DICA, {
+      .text(L / 2, yDica + 16, DICA, {
         fontFamily: '"Patrick Hand", Georgia, serif',
         fontSize: '16px',
         color: '#dbe6f0',
@@ -78,12 +77,9 @@ export class InicioScene extends Phaser.Scene {
     this.criarPainel()
   }
 
-  /** Painel de créditos: a moldura do pack, com os botões de check e X. */
   private criarPainel(): void {
     const { fundo, moldura, interior } = montarPainel(this, 'painel')
 
-    // ancorado no topo do interior: o texto cresce para baixo e nunca alcança
-    // o botão, que fica preso ao rodapé
     const texto = this.add
       .text(interior.centerX, interior.top + 8, CREDITOS.join('\n'), {
         fontFamily: '"Patrick Hand", Georgia, serif',
