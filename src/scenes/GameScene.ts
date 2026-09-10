@@ -1,114 +1,154 @@
 import Phaser from 'phaser'
-import { MUNDO, PAREDES, SALAS, SPAWN } from '../mapa'
 import { alternanciaLiberada } from '../ui/atalhos'
-// o Vite resolve os imports para as URLs finais e falha o build se algum sumir
-import madeira from '../arte/madeira.png'
-import jogador from '../arte/jogador.png'
 
-const VELOCIDADE = 180
+const PLAYER_SPEED = 180
+const WORLD_WIDTH = 2400
+const WORLD_HEIGHT = 1800
 
 export class GameScene extends Phaser.Scene {
-  private jogador!: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody
-  private setas!: Phaser.Types.Input.Keyboard.CursorKeys
-  private escape!: Phaser.Input.Keyboard.Key
-  private teclaC!: Phaser.Input.Keyboard.Key
+    private player!: Phaser.Physics.Arcade.Sprite
+    private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
+    private upKey!: Phaser.Input.Keyboard.Key
+    private leftKey!: Phaser.Input.Keyboard.Key
+    private downKey!: Phaser.Input.Keyboard.Key
+    private rightKey!: Phaser.Input.Keyboard.Key
+    private escape!: Phaser.Input.Keyboard.Key
 
-  constructor() {
-    super('GameScene')
-  }
-
-  preload(): void {
-    this.load.image('madeira', madeira)
-    this.load.image('jogador', jogador)
-  }
-
-  create(dados?: { abrirMenu?: boolean }): void {
-    this.physics.world.setBounds(0, 0, MUNDO.largura, MUNDO.altura)
-    this.cameras.main.setBounds(0, 0, MUNDO.largura, MUNDO.altura)
-
-    // piso
-    this.add.tileSprite(0, 0, MUNDO.largura, MUNDO.altura, 'madeira').setOrigin(0, 0)
-
-    // paredes: retângulos pretos, cada um com corpo estático
-    const paredes = PAREDES.map((p) => {
-      const r = this.add.rectangle(p.x + p.w / 2, p.y + p.h / 2, p.w, p.h, 0x000000)
-      this.physics.add.existing(r, true)
-      return r
-    })
-
-    // nomes das salas, desenhados no mundo (rolam junto com a câmera)
-    for (const sala of SALAS) {
-      this.add
-        .text(sala.x, sala.y, sala.nome.toUpperCase(), {
-          fontFamily: 'Georgia, "Times New Roman", serif',
-          fontSize: '20px',
-          color: '#f2ece0',
-        })
-        .setOrigin(0.5)
-        .setStroke('#1a1208', 5)
-        .setDepth(5)
+    constructor() {
+        super('GameScene')
     }
 
-    this.jogador = this.physics.add.sprite(SPAWN.x, SPAWN.y, 'jogador')
-    this.jogador.setCollideWorldBounds(true)
-    this.jogador.setDepth(10)
-    // corpo só nos pés: deixa as portas mais generosas e dá a sensação de profundidade
-    this.jogador.body.setSize(14, 12)
-    this.jogador.body.setOffset(3, 15)
+    create(dados?: { abrirMenu?: boolean }): void {
+        this.createTestMap()
 
-    this.physics.add.collider(this.jogador, paredes)
+        // Cria uma textura temporária para representar o personagem
+        const graphics = this.make.graphics({ x: 0, y: 0 })
 
-    this.cameras.main.startFollow(this.jogador, true, 0.12, 0.12)
+        graphics.fillStyle(0x3498db)
+        graphics.fillRect(0, 0, 40, 40)
+        graphics.generateTexture('player', 40, 40)
+        graphics.destroy()
 
-    const teclado = this.input.keyboard!
-    this.setas = teclado.createCursorKeys()
-    this.escape = teclado.addKey(Phaser.Input.Keyboard.KeyCodes.ESC)
-    this.teclaC = teclado.addKey(Phaser.Input.Keyboard.KeyCodes.C)
+        // Cria o personagem com física
+        this.player = this.physics.add.sprite(400, 300, 'player')
 
-    this.physics.world.drawDebug = false
+        // this.cameras.main.startFollow(this.player)
 
-    this.add
-      .text(8, 8, 'setas: mover   ·   ESC: menu   ·   C: colisores', {
-        fontFamily: 'monospace',
-        fontSize: '11px',
-        color: '#9a9aae',
-      })
-      .setScrollFactor(0)
-      .setDepth(100)
+        this.cameras.main.startFollow(
+            this.player,
+            true,
+            0.01,
+            0.01,
+        )
 
-    // quem abre o menu é o ESC; a entrada no jogo vem da tela de início
-    if (dados?.abrirMenu === true) this.abrirMenu()
-  }
+        // Captura as setas do teclado
+        this.cursors = this.input.keyboard!.createCursorKeys()
 
-  private abrirMenu(): void {
-    if (this.scene.isActive('MenuScene')) return
-    this.escape.reset()
-    this.scene.launch('MenuScene')
-    this.scene.pause()
-  }
+        // Define a movimentação com WASD além das setas
+        this.upKey = this.input.keyboard!.addKey(
+            Phaser.Input.Keyboard.KeyCodes.W,
+        )
 
-  update(): void {
-    if (Phaser.Input.Keyboard.JustDown(this.escape) && alternanciaLiberada(this.game, 'esc')) {
-      this.abrirMenu()
-      return
+        this.leftKey = this.input.keyboard!.addKey(
+            Phaser.Input.Keyboard.KeyCodes.A,
+        )
+
+        this.downKey = this.input.keyboard!.addKey(
+            Phaser.Input.Keyboard.KeyCodes.S,
+        )
+
+        this.rightKey = this.input.keyboard!.addKey(
+            Phaser.Input.Keyboard.KeyCodes.D,
+        )
+
+        this.escape = this.input.keyboard!.addKey(
+            Phaser.Input.Keyboard.KeyCodes.ESC,
+        )
+
+        // quem abre a pausa é o ESC; a entrada no jogo vem da tela de início
+        if (dados?.abrirMenu === true) this.abrirMenu()
     }
 
-    if (Phaser.Input.Keyboard.JustDown(this.teclaC) && alternanciaLiberada(this.game, 'colisores')) {
-      const mundo = this.physics.world
-      mundo.drawDebug = !mundo.drawDebug
-      if (!mundo.drawDebug) mundo.debugGraphic.clear()
+    private abrirMenu(): void {
+        if (this.scene.isActive('MenuScene')) return
+
+        // o menu abre com ESC ainda pressionado; sem o reset ele fecharia na hora
+        this.escape.reset()
+
+        this.scene.launch('MenuScene')
+        this.scene.pause()
     }
 
-    let x = 0
-    let y = 0
+    update(): void {
+        if (
+            Phaser.Input.Keyboard.JustDown(this.escape) &&
+            alternanciaLiberada(this.game, 'esc')
+        ) {
+            this.abrirMenu()
+            return
+        }
 
-    if (this.setas.left.isDown) x -= 1
-    if (this.setas.right.isDown) x += 1
-    if (this.setas.up.isDown) y -= 1
-    if (this.setas.down.isDown) y += 1
+        const left = this.cursors.left.isDown || this.leftKey.isDown
+        const right = this.cursors.right.isDown || this.rightKey.isDown
+        const up = this.cursors.up.isDown || this.upKey.isDown
+        const down = this.cursors.down.isDown || this.downKey.isDown
 
-    // normaliza para a diagonal não ficar mais rápida que a reta
-    const direcao = new Phaser.Math.Vector2(x, y).normalize().scale(VELOCIDADE)
-    this.jogador.setVelocity(direcao.x, direcao.y)
-  }
+        const x = Number(right) - Number(left)
+        const y = Number(down) - Number(up)
+
+        const direction = new Phaser.Math.Vector2(x, y)
+
+        // Evita que a diagonal fique mais rápida
+        if (direction.length() > 0) {
+            direction.normalize()
+        }
+
+        this.player.setVelocity(
+            direction.x * PLAYER_SPEED,
+            direction.y * PLAYER_SPEED,
+        )
+    }
+
+    private createTestMap(): void {
+        const tileSize = 300
+
+        const colors = [
+            0x4f6d7a,
+            0x6b705c,
+            0x8a6d5c,
+            0x495867,
+            0x706677,
+            0x567568,
+        ]
+
+        let index = 0
+
+        for (let y = 0; y < WORLD_HEIGHT; y += tileSize) {
+            for (let x = 0; x < WORLD_WIDTH; x += tileSize) {
+                const color = colors[index % colors.length]
+
+                this.add
+                    .rectangle(
+                        x + tileSize / 2,
+                        y + tileSize / 2,
+                        tileSize,
+                        tileSize,
+                        color,
+                    )
+                    .setStrokeStyle(3, 0xffffff, 0.25)
+
+                this.add.text(
+                    x + 15,
+                    y + 15,
+                    `${x}, ${y}`,
+                    {
+                        fontSize: '20px',
+                        color: '#ffffff',
+                    },
+                )
+
+                index++
+            }
+        }
+    }
 }
