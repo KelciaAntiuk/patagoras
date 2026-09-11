@@ -1,4 +1,5 @@
 import Phaser from 'phaser'
+import { alternanciaLiberada } from '../ui/atalhos'
 
 const PLAYER_SPEED = 180
 const WORLD_WIDTH = 2400
@@ -11,12 +12,13 @@ export class GameScene extends Phaser.Scene {
     private leftKey!: Phaser.Input.Keyboard.Key
     private downKey!: Phaser.Input.Keyboard.Key
     private rightKey!: Phaser.Input.Keyboard.Key
+    private escape!: Phaser.Input.Keyboard.Key
 
     constructor() {
         super('GameScene')
     }
 
-    create(): void {
+    create(dados?: { abrirMenu?: boolean }): void {
         this.createTestMap()
 
         // Cria uma textura temporária para representar o personagem
@@ -58,9 +60,32 @@ export class GameScene extends Phaser.Scene {
         this.rightKey = this.input.keyboard!.addKey(
             Phaser.Input.Keyboard.KeyCodes.D,
         )
+
+        this.escape = this.input.keyboard!.addKey(
+            Phaser.Input.Keyboard.KeyCodes.ESC,
+        )
+
+        if (dados?.abrirMenu === true) this.abrirMenu()
+    }
+
+    private abrirMenu(): void {
+        if (this.scene.isActive('MenuScene')) return
+
+        this.escape.reset()
+
+        this.scene.launch('MenuScene')
+        this.scene.pause()
     }
 
     update(): void {
+        if (
+            Phaser.Input.Keyboard.JustDown(this.escape) &&
+            alternanciaLiberada(this.game, 'esc')
+        ) {
+            this.abrirMenu()
+            return
+        }
+
         const left = this.cursors.left.isDown || this.leftKey.isDown
         const right = this.cursors.right.isDown || this.rightKey.isDown
         const up = this.cursors.up.isDown || this.upKey.isDown
