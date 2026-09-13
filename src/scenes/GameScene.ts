@@ -143,6 +143,9 @@ export class GameScene
     private pickupRadiusDebug!:
         Phaser.GameObjects.Graphics
 
+    private layerParedesInvisiveis!:
+        Phaser.Tilemaps.TilemapLayer | null
+
     private debugVisible = false
 
     constructor() {
@@ -158,6 +161,11 @@ export class GameScene
         this.load.image(
             'run-sheet',
             'assets/tilesets/16x16 Run-Sheet.png',
+        )
+
+        this.load.image(
+            'dungeon-tileset',
+            'assets/tilesets/Dungeon_Tileset.png',
         )
 
         this.load.tilemapTiledJSON(
@@ -184,25 +192,53 @@ export class GameScene
                 'run-sheet',
             )
 
-        map.createLayer(
-            'Camada de Blocos 1',
-            [
-                oldHouseTileset!,
-                runSheetTileset!,
-            ],
-            0,
-            0,
-        )
+        const dungeonTileset =
+            map.addTilesetImage(
+                'Dungeon_Tileset',
+                'dungeon-tileset',
+            )
+
+        const rawTilesets = [
+            oldHouseTileset,
+            runSheetTileset,
+            dungeonTileset,
+        ]
+        // Filter out nulls to prevent crashes
+        const tilesets = rawTilesets.filter(ts => ts !== null) as Phaser.Tilemaps.Tileset[]
+
+        const mapOriginX = 100
+        const mapOriginY = 100
+
+        const layerBruto = map.createLayer('mapa bruto', tilesets, mapOriginX - 256, mapOriginY - 256)
+        layerBruto?.setDepth(0)
+
+        const layerSolo = map.createLayer('detalhes de solo', tilesets, mapOriginX, mapOriginY)
+        layerSolo?.setDepth(1)
+
+        const layerParedes = map.createLayer('paredes', tilesets, mapOriginX, mapOriginY)
+        layerParedes?.setDepth(2)
+
+        const layerParedes2 = map.createLayer('paredes 2', tilesets, mapOriginX, mapOriginY)
+        layerParedes2?.setDepth(3)
+
+        const layerParedesInvisiveis = map.createLayer('paredes invisiveis', tilesets, mapOriginX, mapOriginY)
+        layerParedesInvisiveis?.setDepth(10) // Acima do personagem
+
+        const layerProps = map.createLayer('detalhes de Props', tilesets, mapOriginX, mapOriginY)
+        layerProps?.setDepth(11)
+        
+        this.layerParedesInvisiveis = layerParedesInvisiveis
 
         this.createTestTextures()
 
-        // PERSONAGEM
+        // PERSONAGEM (bloco 16x16 posicionado dentro da casa)
         this.player =
             this.physics.add.sprite(
                 400,
-                300,
+                460,
                 'player',
             )
+        this.player.setDepth(5)
 
         // LIMITES FÍSICOS DO MUNDO
         this.physics.world
@@ -420,6 +456,16 @@ export class GameScene
         }
 
         this.updatePickupRadiusDebug()
+
+        if (this.layerParedesInvisiveis) {
+            // Check if there is a tile at the player's position in this layer
+            const tile = this.layerParedesInvisiveis.getTileAtWorldXY(this.player.x, this.player.y, true);
+            if (tile && tile.index > 0) {
+                this.layerParedesInvisiveis.setAlpha(0); // Fica invisível quando o personagem passa atrás dela
+            } else {
+                this.layerParedesInvisiveis.setAlpha(1);
+            }
+        }
     }
 
     private createTestTextures():
@@ -427,8 +473,8 @@ export class GameScene
 
         this.createSolidTexture(
             'player',
-            40,
-            40,
+            16,
+            16,
             0x3498db,
         )
 
@@ -520,32 +566,7 @@ export class GameScene
                 },
             ]
 
-        // DESENHA AS PAREDES
-        // Apenas para visualização.
-        // A física fica no CollisionSystem.
-        walls.forEach(
-            (wall) => {
-                this.add
-                    .rectangle(
-                        wall.x +
-                        wall.width / 2,
-
-                        wall.y +
-                        wall.height / 2,
-
-                        wall.width,
-                        wall.height,
-
-                        0x222222,
-                    )
-                    .setStrokeStyle(
-                        2,
-                        0xffffff,
-                        0.5,
-                    )
-            },
-        )
-
+        // DESENHA AS PAREDES (desativado para não cobrir o mapa visual)
         return walls
     }
 
@@ -554,24 +575,24 @@ export class GameScene
 
         const positions = [
             {
+                x: 350,
+                y: 460,
+            },
+            {
+                x: 450,
+                y: 460,
+            },
+            {
+                x: 400,
+                y: 500,
+            },
+            {
                 x: 480,
-                y: 300,
+                y: 480,
             },
             {
-                x: 610,
-                y: 350,
-            },
-            {
-                x: 790,
-                y: 350,
-            },
-            {
-                x: 820,
-                y: 650,
-            },
-            {
-                x: 1080,
-                y: 650,
+                x: 320,
+                y: 480,
             },
         ]
 
