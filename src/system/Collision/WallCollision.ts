@@ -106,11 +106,13 @@ export class WallCollision {
 
     this.colliders.clear()
 
-    this.group.clear(
-      true,
-      true,
-    )
+    if (this.group.children) {
+      this.group.clear(
+        true,
+        true,
+      )
 
-    this.group.destroy(true)
+      this.group.destroy(true)
+    }
   }
 }
