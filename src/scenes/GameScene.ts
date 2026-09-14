@@ -236,6 +236,7 @@ export class GameScene
         layerColisao?.setVisible(false)
         
         this.layerParedesInvisiveis = layerParedesInvisiveis
+        this.layerParedesInvisiveis = layerParedesInvisiveis as Phaser.Tilemaps.TilemapLayer | null
 
         this.createTestTextures()
 
@@ -292,7 +293,10 @@ export class GameScene
         const wallRects =
             this.extractWallRects(
                 hasCustomCollision
-                    ? [layerColisao] : [layerParedes, layerParedes2],
+                (hasCustomCollision
+                    ? [layerColisao]
+                    : [layerParedes, layerParedes2],
+                    : [layerParedes, layerParedes2]) as (Phaser.Tilemaps.TilemapLayer | null)[],
             )
 
         this.collision
