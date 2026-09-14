@@ -1,5 +1,7 @@
 import Phaser from 'phaser'
 
+import { alternanciaLiberada } from '../ui/atalhos'
+
 import {
     CollisionSystem,
 } from '../system/Collision/CollisionSystem'
@@ -128,6 +130,9 @@ export class GameScene
     private rightKey!:
         Phaser.Input.Keyboard.Key
 
+    private escape!:
+        Phaser.Input.Keyboard.Key
+
     private interactKey!:
         Phaser.Input.Keyboard.Key
 
@@ -149,7 +154,12 @@ export class GameScene
         super('GameScene')
     }
 
-    create(): void {
+    create(
+        dados?: {
+            abrirMenu?: boolean
+        },
+    ): void {
+
         this.createTestMap()
 
         this.createTestTextures()
@@ -264,6 +274,14 @@ export class GameScene
                         .KeyCodes.D,
                 )
 
+        // ESC = MENU
+        this.escape =
+            this.input.keyboard!
+                .addKey(
+                    Phaser.Input.Keyboard
+                        .KeyCodes.ESC,
+                )
+
         // E = INTERAGIR
         this.interactKey =
             this.input.keyboard!
@@ -295,9 +313,50 @@ export class GameScene
                     .removeAllListeners()
             },
         )
+
+        if (
+            dados?.abrirMenu === true
+        ) {
+            this.abrirMenu()
+        }
+    }
+
+    private abrirMenu(): void {
+        if (
+            this.scene.isActive(
+                'MenuScene',
+            )
+        ) {
+            return
+        }
+
+        this.escape.reset()
+
+        this.scene.launch(
+            'MenuScene',
+        )
+
+        this.scene.pause()
     }
 
     update(): void {
+
+        // ABRE MENU COM ESC
+        if (
+            Phaser.Input.Keyboard
+                .JustDown(
+                    this.escape,
+                ) &&
+            alternanciaLiberada(
+                this.game,
+                'esc',
+            )
+        ) {
+            this.abrirMenu()
+
+            return
+        }
+
         const left =
             this.cursors.left.isDown ||
             this.leftKey.isDown
@@ -415,8 +474,11 @@ export class GameScene
         height: number,
         color: number,
     ): void {
+
         if (
-            this.textures.exists(key)
+            this.textures.exists(
+                key,
+            )
         ) {
             return
         }
@@ -561,7 +623,7 @@ export class GameScene
                 16,
                 16,
 
-                'Mover: WASD/setas | Coletar: E | Debug: F3',
+                'Mover: WASD/setas | Coletar: E | Menu: ESC | Debug: F3',
 
                 {
                     fontSize:
@@ -742,7 +804,9 @@ export class GameScene
     private updatePickupRadiusDebug():
         void {
 
-        if (!this.debugVisible) {
+        if (
+            !this.debugVisible
+        ) {
             return
         }
 
