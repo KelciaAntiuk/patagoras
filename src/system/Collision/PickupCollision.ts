@@ -161,12 +161,14 @@ export class PickupCollision
   }
 
   destroy(): void {
-    this.group.clear(
-      true,
-      true,
-    )
+    if (this.group.children) {
+      this.group.clear(
+        true,
+        true,
+      )
 
-    this.group.destroy(true)
+      this.group.destroy(true)
+    }
 
     this.current = null
     this.actor = undefined
