@@ -148,29 +148,110 @@ export class GameScene
     private pickupRadiusDebug!:
         Phaser.GameObjects.Graphics
 
+    private layerParedesInvisiveis!:
+        Phaser.Tilemaps.TilemapLayer | null
+
+    private hiddenTiles:
+        Phaser.Tilemaps.Tile[] = []
+
     private debugVisible = false
 
     constructor() {
         super('GameScene')
     }
 
-    create(
-        dados?: {
-            abrirMenu?: boolean
-        },
-    ): void {
+    preload(): void {
+        this.load.image(
+            'old-house',
+            'assets/tilesets/old house.png',
+        )
 
-        this.createTestMap()
+        this.load.image(
+            'run-sheet',
+            'assets/tilesets/16x16 Run-Sheet.png',
+        )
+
+        this.load.image(
+            'dungeon-tileset',
+            'assets/tilesets/Dungeon_Tileset.png',
+        )
+
+        this.load.tilemapTiledJSON(
+            'mapa-principal',
+            'assets/maps/mapaPrincipal.json',
+        )
+    }
+
+    create(): void {
+        const map =
+            this.make.tilemap({
+                key: 'mapa-principal',
+            })
+
+        const oldHouseTileset =
+            map.addTilesetImage(
+                'old house',
+                'old-house',
+            )
+
+        const runSheetTileset =
+            map.addTilesetImage(
+                '16x16 Run-Sheet',
+                'run-sheet',
+            )
+
+        const dungeonTileset =
+            map.addTilesetImage(
+                'Dungeon_Tileset',
+                'dungeon-tileset',
+            )
+
+        const rawTilesets = [
+            oldHouseTileset,
+            runSheetTileset,
+            dungeonTileset,
+        ]
+        // Filter out nulls to prevent crashes
+        const tilesets = rawTilesets.filter(ts => ts !== null) as Phaser.Tilemaps.Tileset[]
+
+        const mapOriginX = 100
+        const mapOriginY = 100
+
+        const layerBruto = map.createLayer('mapa bruto', tilesets, mapOriginX, mapOriginY)
+        layerBruto?.setDepth(0)
+
+        const layerSolo = map.createLayer('detalhes de solo', tilesets, mapOriginX, mapOriginY)
+        layerSolo?.setDepth(1)
+
+        const layerParedes = map.createLayer('paredes', tilesets, mapOriginX, mapOriginY)
+        layerParedes?.setDepth(2)
+
+        const layerParedes2 = map.createLayer('paredes 2', tilesets, mapOriginX, mapOriginY)
+        layerParedes2?.setDepth(3)
+
+        const layerParedesInvisiveis = map.createLayer('paredes invisiveis', tilesets, mapOriginX, mapOriginY + 256)
+        layerParedesInvisiveis?.setVisible(true)
+        layerParedesInvisiveis?.setDepth(10) // Acima do personagem
+
+        const layerProps = map.createLayer('detalhes de Props', tilesets, mapOriginX, mapOriginY)
+        layerProps?.setDepth(11)
+
+        // Camada de colisão personalizada desenhada no Tiled
+        const layerColisao = map.createLayer('colisao', tilesets, mapOriginX, mapOriginY)
+        layerColisao?.setVisible(false)
+        
+        this.layerParedesInvisiveis = layerParedesInvisiveis
 
         this.createTestTextures()
 
-        // PERSONAGEM
+        // PERSONAGEM (bloco 16x16 posicionado dentro da casa)
         this.player =
             this.physics.add.sprite(
                 400,
-                300,
+                460,
                 'player',
             )
+        this.player.setDepth(5)
 
         // LIMITES FÍSICOS DO MUNDO
         this.physics.world
@@ -208,13 +289,20 @@ export class GameScene
                 },
             )
 
-        // PAREDES DE TESTE
-        const testWalls =
-            this.createTestWalls()
+        // PAREDES DO MAPA COM COLISÃO (usa a camada 'colisao' do Tiled)
+        const hasCustomCollision =
+            layerColisao &&
+            layerColisao.filterTiles((t: Phaser.Tilemaps.Tile) => t.index > 0).length > 0
+
+        const wallRects =
+            this.extractWallRects(
+                hasCustomCollision
+                    ? [layerColisao] : [layerParedes, layerParedes2],
+            )
 
         this.collision
             .buildWalls(
-                testWalls,
+                wallRects,
             )
             .bindActor(
                 this.player,
@@ -437,6 +525,31 @@ export class GameScene
         }
 
         this.updatePickupRadiusDebug()
+
+        if (this.layerParedesInvisiveis) {
+            // Restaura as paredes que deixaram de cobrir o personagem
+            for (const tile of this.hiddenTiles) {
+                tile.alpha = 1
+            }
+            this.hiddenTiles = []
+
+            // Pega apenas os blocos de paredes invisíveis que estão sobre o personagem
+            const overlappingTiles =
+                this.layerParedesInvisiveis.getTilesWithinWorldXY(
+                    this.player.x - 6,
+                    this.player.y - 18,
+                    12,
+                    24,
+                    { isNotEmpty: true },
+                )
+
+            for (const tile of overlappingTiles) {
+                if (tile && tile.index > 0) {
+                    tile.alpha = 0 // Apenas esta parede do player fica invisível!
+                    this.hiddenTiles.push(tile)
+                }
+            }
+        }
     }
 
     private createTestTextures():
@@ -444,8 +557,8 @@ export class GameScene
 
         this.createSolidTexture(
             'player',
-            40,
-            40,
+            16,
+            16,
             0x3498db,
         )
 
@@ -509,64 +622,68 @@ export class GameScene
         graphics.destroy()
     }
 
-    private createTestWalls():
-        readonly WorldRect[] {
+    private extractWallRects(
+        layers: readonly (Phaser.Tilemaps.TilemapLayer | null)[],
+    ): readonly WorldRect[] {
+        const wallSet = new Set<string>()
 
-        const walls:
-            readonly WorldRect[] = [
-                {
-                    x: 550,
-                    y: 450,
-                    width: 650,
-                    height: 40,
-                },
-                {
-                    x: 900,
-                    y: 490,
-                    width: 40,
-                    height: 500,
-                },
-                {
-                    x: 1200,
-                    y: 300,
-                    width: 500,
-                    height: 40,
-                },
-                {
-                    x: 300,
-                    y: 1050,
-                    width: 700,
-                    height: 40,
-                },
-            ]
+        layers.forEach((layer) => {
+            if (!layer) {
+                return
+            }
 
-        // DESENHA AS PAREDES
-        // Apenas para visualização.
-        // A física fica no CollisionSystem.
-        walls.forEach(
-            (wall) => {
-                this.add
-                    .rectangle(
-                        wall.x +
-                        wall.width / 2,
+            const tiles = layer.filterTiles(
+                (tile: Phaser.Tilemaps.Tile) => tile.index > 0,
+            )
 
-                        wall.y +
-                        wall.height / 2,
+            if (!tiles) {
+                return
+            }
 
-                        wall.width,
-                        wall.height,
+            tiles.forEach((tile: Phaser.Tilemaps.Tile) => {
+                const wx = tile.pixelX + layer.x
+                const wy = tile.pixelY + layer.y
+                wallSet.add(`${wx},${wy}`)
+            })
+        })
 
-                        0x222222,
-                    )
-                    .setStrokeStyle(
-                        2,
-                        0xffffff,
-                        0.5,
-                    )
-            },
-        )
+        const rows = new Map<number, number[]>()
+        wallSet.forEach((key) => {
+            const [x, y] = key.split(',').map(Number)
+            if (!rows.has(y)) {
+                rows.set(y, [])
+            }
+            rows.get(y)!.push(x)
+        })
 
-        return walls
+        const rects: WorldRect[] = []
+        rows.forEach((xList, y) => {
+            xList.sort((a, b) => a - b)
+            let startX = xList[0]
+            let prevX = xList[0]
+            for (let i = 1; i < xList.length; i++) {
+                if (xList[i] === prevX + 16) {
+                    prevX = xList[i]
+                } else {
+                    rects.push({
+                        x: startX,
+                        y,
+                        width: prevX - startX + 16,
+                        height: 16,
+                    })
+                    startX = xList[i]
+                    prevX = xList[i]
+                }
+            }
+            rects.push({
+                x: startX,
+                y,
+                width: prevX - startX + 16,
+                height: 16,
+            })
+        })
+
+        return rects
     }
 
     private spawnTestPickups():
@@ -574,24 +691,24 @@ export class GameScene
 
         const positions = [
             {
+                x: 350,
+                y: 460,
+            },
+            {
+                x: 450,
+                y: 460,
+            },
+            {
+                x: 400,
+                y: 500,
+            },
+            {
                 x: 480,
-                y: 300,
+                y: 480,
             },
             {
-                x: 610,
-                y: 350,
-            },
-            {
-                x: 790,
-                y: 350,
-            },
-            {
-                x: 820,
-                y: 650,
-            },
-            {
-                x: 1080,
-                y: 650,
+                x: 320,
+                y: 480,
             },
         ]
 
