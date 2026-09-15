@@ -182,7 +182,24 @@ export class GameScene
         )
     }
 
-    create(): void {
+    private criarCamada(
+        map: Phaser.Tilemaps.Tilemap,
+        nome: string,
+        tilesets: Parameters<
+            Phaser.Tilemaps.Tilemap['createLayer']
+        >[1],
+        x: number,
+        y: number,
+    ): Phaser.Tilemaps.TilemapLayer | null {
+        return map.createLayer(
+            nome,
+            tilesets,
+            x,
+            y,
+        ) as Phaser.Tilemaps.TilemapLayer | null
+    }
+
+    create(dados?: { abrirMenu?: boolean }): void {
         const map =
             this.make.tilemap({
                 key: 'mapa-principal',
@@ -217,27 +234,27 @@ export class GameScene
         const mapOriginX = 100
         const mapOriginY = 100
 
-        const layerBruto = map.createLayer('mapa bruto', tilesets, mapOriginX, mapOriginY)
+        const layerBruto = this.criarCamada(map, 'mapa bruto', tilesets, mapOriginX, mapOriginY)
         layerBruto?.setDepth(0)
 
-        const layerSolo = map.createLayer('detalhes de solo', tilesets, mapOriginX, mapOriginY)
+        const layerSolo = this.criarCamada(map, 'detalhes de solo', tilesets, mapOriginX, mapOriginY)
         layerSolo?.setDepth(1)
 
-        const layerParedes = map.createLayer('paredes', tilesets, mapOriginX, mapOriginY)
+        const layerParedes = this.criarCamada(map, 'paredes', tilesets, mapOriginX, mapOriginY)
         layerParedes?.setDepth(2)
 
-        const layerParedes2 = map.createLayer('paredes 2', tilesets, mapOriginX, mapOriginY)
+        const layerParedes2 = this.criarCamada(map, 'paredes 2', tilesets, mapOriginX, mapOriginY)
         layerParedes2?.setDepth(3)
 
-        const layerParedesInvisiveis = map.createLayer('paredes invisiveis', tilesets, mapOriginX, mapOriginY + 256)
+        const layerParedesInvisiveis = this.criarCamada(map, 'paredes invisiveis', tilesets, mapOriginX, mapOriginY + 256)
         layerParedesInvisiveis?.setVisible(true)
         layerParedesInvisiveis?.setDepth(10) // Acima do personagem
 
-        const layerProps = map.createLayer('detalhes de Props', tilesets, mapOriginX, mapOriginY)
+        const layerProps = this.criarCamada(map, 'detalhes de Props', tilesets, mapOriginX, mapOriginY)
         layerProps?.setDepth(11)
 
         // Camada de colisão personalizada desenhada no Tiled
-        const layerColisao = map.createLayer('colisao', tilesets, mapOriginX, mapOriginY)
+        const layerColisao = this.criarCamada(map, 'colisao', tilesets, mapOriginX, mapOriginY)
         layerColisao?.setVisible(false)
         
         this.layerParedesInvisiveis = layerParedesInvisiveis
@@ -945,73 +962,4 @@ export class GameScene
             )
     }
 
-    private createTestMap():
-        void {
-
-        const tileSize = 300
-
-        const colors = [
-            0x4f6d7a,
-            0x6b705c,
-            0x8a6d5c,
-            0x495867,
-            0x706677,
-            0x567568,
-        ]
-
-        let index = 0
-
-        for (
-            let y = 0;
-            y < WORLD_HEIGHT;
-            y += tileSize
-        ) {
-            for (
-                let x = 0;
-                x < WORLD_WIDTH;
-                x += tileSize
-            ) {
-                const color =
-                    colors[
-                    index %
-                    colors.length
-                    ]
-
-                this.add
-                    .rectangle(
-                        x +
-                        tileSize / 2,
-
-                        y +
-                        tileSize / 2,
-
-                        tileSize,
-                        tileSize,
-                        color,
-                    )
-                    .setStrokeStyle(
-                        3,
-                        0xffffff,
-                        0.25,
-                    )
-
-                this.add.text(
-                    x + 15,
-                    y + 15,
-
-                    `${x}, ${y}`,
-
-                    {
-                        fontSize:
-                            '20px',
-
-                        color:
-                            '#ffffff',
-                    },
-                )
-
-                index++
-            }
-        }
-    }
 }
