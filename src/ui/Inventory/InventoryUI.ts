@@ -1,6 +1,6 @@
 import Phaser from 'phaser'
 import { INVENTORY_EVENTS } from '../../system/Inventory/Inventory.types'
-import type { InventorySlot } from '../../system/Inventory/Inventory.types'
+import type { InventorySlot, ItemDefinition } from '../../system/Inventory/Inventory.types'
 import type { InventorySystem } from '../../system/Inventory/InventorySystem'
 import { InventorySlotUI, SLOT_SIZE } from './InventorySlotUI'
 
@@ -10,7 +10,14 @@ const PADDING = 14
 export class InventoryUI extends Phaser.GameObjects.Container {
   private readonly slotViews: InventorySlotUI[] = []
 
-  constructor(scene: Phaser.Scene, inventory: InventorySystem, x: number, y: number) {
+  /** Com `onSelect`, clicar em um slot com item chama o callback com o item e o índice do slot. */
+  constructor(
+    scene: Phaser.Scene,
+    inventory: InventorySystem,
+    x: number,
+    y: number,
+    onSelect?: (item: ItemDefinition, index: number) => void,
+  ) {
     super(scene, x, y)
 
     const capacity = inventory.getCapacity()
@@ -24,7 +31,7 @@ export class InventoryUI extends Phaser.GameObjects.Container {
 
     for (let i = 0; i < capacity; i++) {
       const slotX = -slotsWidth / 2 + SLOT_SIZE / 2 + i * (SLOT_SIZE + SPACING)
-      const slotView = new InventorySlotUI(scene, slotX, 0)
+      const slotView = new InventorySlotUI(scene, slotX, 0, onSelect && ((item) => onSelect(item, i)))
       this.slotViews.push(slotView)
       this.add(slotView)
     }
@@ -34,7 +41,10 @@ export class InventoryUI extends Phaser.GameObjects.Container {
     scene.add.existing(this)
 
     this.sync(inventory.getSlots())
-    inventory.on(INVENTORY_EVENTS.CHANGED, (slots: readonly InventorySlot[]) => this.sync(slots))
+    const onChange = (slots: readonly InventorySlot[]): void => this.sync(slots)
+    inventory.on(INVENTORY_EVENTS.CHANGED, onChange)
+    // O inventário vive mais que a UI (ex.: a UI do modal de puzzle é recriada a cada abertura).
+    this.once(Phaser.GameObjects.Events.DESTROY, () => inventory.off(INVENTORY_EVENTS.CHANGED, onChange))
   }
 
   private sync(slots: readonly InventorySlot[]): void {

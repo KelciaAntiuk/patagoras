@@ -57,12 +57,28 @@ import {
     PATAGORAS_CONFIG,
 } from '../characters/Patagoras/Patagoras.config'
 
+import {
+    PuzzleSystem,
+} from '../system/Puzzle/PuzzleSystem'
+
+import {
+    PUZZLE_EVENTS,
+    PuzzleCloseReason,
+} from '../system/Puzzle/Puzzle.types'
+
+import type {
+    PuzzleFechamento,
+} from '../system/Puzzle/Puzzle.types'
+
 const PLAYER_SPEED = 180
 
 const WORLD_WIDTH = 2400
 const WORLD_HEIGHT = 1800
 
 const PICKUP_RADIUS = 90
+
+const PUZZLE_TESTE_X = 480
+const PUZZLE_TESTE_Y = 660
 
 const TEST_ITEMS:
     readonly ItemDefinition[] = [
@@ -150,6 +166,9 @@ export class GameScene
 
     private collision!:
         CollisionSystem
+
+    private puzzles!:
+        PuzzleSystem
 
     private cursors!:
         Phaser.Types.Input.Keyboard.CursorKeys
@@ -416,6 +435,30 @@ export class GameScene
             },
         )
 
+        // PUZZLES
+        this.puzzles =
+            new PuzzleSystem(
+                this,
+                {
+                    jogador:
+                        this.player,
+
+                    inventario:
+                        this.inventory,
+
+                    patagorasHit:
+                        this.patagorasHit,
+                },
+            )
+
+        // GATILHO DE TESTE (abre o puzzle com E)
+        this.puzzles
+            .adicionarGatilho(
+                PUZZLE_TESTE_X,
+                PUZZLE_TESTE_Y,
+                'teste',
+            )
+
         // ITENS DE TESTE
         this.spawnTestPickups()
 
@@ -502,6 +545,9 @@ export class GameScene
         this.events.once(
             'shutdown',
             () => {
+                this.puzzles
+                    .destroy()
+
                 this.collision
                     .destroy()
 
@@ -546,12 +592,19 @@ export class GameScene
 
     update(): void {
 
+        // COM O PUZZLE ABERTO O JOGADOR FICA PARADO
+        // (ESC e cliques são do puzzle), MAS O
+        // PATÁGORAS CONTINUA ANDANDO
+        const puzzleAberto =
+            this.puzzles.aberto
+
         // ABRE MENU COM ESC
         if (
             Phaser.Input.Keyboard
                 .JustDown(
                     this.escape,
                 ) &&
+            !puzzleAberto &&
             alternanciaLiberada(
                 this.game,
                 'esc',
@@ -579,12 +632,16 @@ export class GameScene
             this.downKey.isDown
 
         const x =
-            Number(right) -
-            Number(left)
+            puzzleAberto
+                ? 0
+                : Number(right) -
+                Number(left)
 
         const y =
-            Number(down) -
-            Number(up)
+            puzzleAberto
+                ? 0
+                : Number(down) -
+                Number(up)
 
         const direction =
             new Phaser.Math.Vector2(
@@ -616,15 +673,29 @@ export class GameScene
         // MAIS PRÓXIMO DO PLAYER
         this.collision.update()
 
-        // COLETA ITEM COM E
+        // ATUALIZA QUAL GATILHO DE
+        // PUZZLE ESTÁ AO ALCANCE
+        this.puzzles.update()
+
+        // E = COLETA ITEM OU ABRE PUZZLE
+        // (item tem prioridade)
         if (
             Phaser.Input.Keyboard
                 .JustDown(
                     this.interactKey,
-                )
+                ) &&
+            !puzzleAberto
         ) {
-            this.collision
-                .tryCollect()
+            if (
+                this.collision.pickups
+                    .getFocused()
+            ) {
+                this.collision
+                    .tryCollect()
+            } else {
+                this.puzzles
+                    .interagir()
+            }
         }
 
         // LIGA/DESLIGA DEBUG COM F3
@@ -867,7 +938,7 @@ export class GameScene
                 16,
                 16,
 
-                'Mover: WASD/setas | Coletar: E | Menu: ESC | Debug: F3',
+                'Mover: WASD/setas | Interagir: E | Menu: ESC | Debug: F3',
 
                 {
                     fontSize:
@@ -1019,6 +1090,38 @@ export class GameScene
                     .setText(
                         'Inventário cheio.',
                     )
+            },
+        )
+
+        this.puzzles.on(
+            PUZZLE_EVENTS
+                .SOLVED,
+
+            () => {
+                this.statusText
+                    .setText(
+                        'Puzzle resolvido!',
+                    )
+            },
+        )
+
+        this.puzzles.on(
+            PUZZLE_EVENTS
+                .CLOSED,
+
+            (
+                fechamento:
+                    PuzzleFechamento,
+            ) => {
+                if (
+                    fechamento.motivo ===
+                    PuzzleCloseReason.Atacado
+                ) {
+                    this.statusText
+                        .setText(
+                            'O Patágoras te pegou! O puzzle foi fechado.',
+                        )
+                }
             },
         )
     }
