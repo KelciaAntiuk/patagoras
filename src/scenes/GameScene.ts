@@ -41,6 +41,22 @@ import {
     PatagorasAI,
 } from '../characters/Patagoras/PatagorasAI'
 
+import {
+    PatagorasPathfinder,
+} from '../characters/Patagoras/PatagorasPathfinder'
+
+import {
+    PatagorasHit,
+} from '../characters/Patagoras/PatagorasHit'
+
+import {
+    PATAGORAS_EVENTS,
+} from '../characters/Patagoras/Patagoras.events'
+
+import {
+    PATAGORAS_CONFIG,
+} from '../characters/Patagoras/Patagoras.config'
+
 const PLAYER_SPEED = 180
 
 const WORLD_WIDTH = 2400
@@ -122,6 +138,12 @@ export class GameScene
 
     private patagorasAI!:
         PatagorasAI
+
+    private patagorasPathfinder!:
+        PatagorasPathfinder
+
+    private patagorasHit!:
+        PatagorasHit
 
     private inventory!:
         InventorySystem
@@ -292,12 +314,6 @@ export class GameScene
                 460,
             )
 
-        this.patagorasAI =
-            new PatagorasAI(
-                this.patagoras,
-                this.player,
-            )
-
         // LIMITES FÍSICOS DO MUNDO
         this.physics.world
             .setBounds(
@@ -357,6 +373,48 @@ export class GameScene
             .bindActor(
                 this.patagoras.sprite,
             )
+
+        // PATHFINDING DO PATÁGORAS
+        this.patagorasPathfinder =
+            new PatagorasPathfinder(
+                WORLD_WIDTH,
+                WORLD_HEIGHT,
+                16,
+                wallRects,
+                PATAGORAS_CONFIG
+                    .pathfindingPadding,
+            )
+
+        // IA DO PATÁGORAS
+        this.patagorasAI =
+            new PatagorasAI(
+                this,
+                this.patagoras,
+                this.player,
+                this.patagorasPathfinder,
+            )
+
+        // HIT DO PATÁGORAS
+        this.patagorasHit =
+            new PatagorasHit(
+                this,
+                this.patagoras,
+                this.player,
+            )
+
+        this.patagorasHit.on(
+            PATAGORAS_EVENTS.HIT_PLAYER,
+            () => {
+                console.log(
+                    'Patágoras acertou o jogador!',
+                )
+
+                this.patagorasAI.stun(
+                    PATAGORAS_CONFIG
+                        .hitRecoveryMs,
+                )
+            },
+        )
 
         // ITENS DE TESTE
         this.spawnTestPickups()
@@ -450,6 +508,11 @@ export class GameScene
                 this.inventory
                     .removeAllListeners()
 
+                this.patagorasAI
+                    .destroy()
+
+                this.patagorasHit
+                    .destroy()
 
                 this.patagoras
                     .destroy()
