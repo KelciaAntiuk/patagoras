@@ -1,0 +1,17 @@
+export const PATAGORAS_CONFIG = {
+    speed: 120,
+    chaseSpeed: 150,
+    detectionRadius: 200,
+    loseTargetRadius: 350,
+    searchDurationMs: 5000,
+    searchReachDistance: 16,
+    wanderRadius: 450,
+    wanderMinDistance: 120,
+    wanderReachDistance: 16,
+    playerReachabilityCheckMs: 500,
+    hitCooldownMs: 1000,
+    hitRecoveryMs: 5000,
+    pathRecalculateMs: 250,
+    waypointReachDistance: 8,
+    pathfindingPadding: 6,
+} as const
