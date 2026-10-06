@@ -1403,6 +1403,10 @@ export class GameScene
                 this.statusText
                     .setText(
                         'Puzzle resolvido!',
+                    )
+            },
+        )
+
         this.foodThrow.on(
             FOOD_EVENTS.NO_FOOD,
             () => {
@@ -1428,6 +1432,11 @@ export class GameScene
                     this.statusText
                         .setText(
                             'O Patágoras te pegou! O puzzle foi fechado.',
+                        )
+                }
+            },
+        )
+
         this.foodThrow.on(
             FOOD_EVENTS.BUSY,
             () => {
