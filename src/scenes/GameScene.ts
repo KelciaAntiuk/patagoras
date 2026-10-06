@@ -33,10 +33,6 @@ import {
     InventorySystem,
 } from '../system/Inventory/InventorySystem'
 
-import {
-    Patagoras,
-} from '../characters/Patagoras/Patagoras'
-
 const PLAYER_SPEED = 180
 
 const WORLD_WIDTH = 2400
@@ -112,9 +108,6 @@ export class GameScene
 
     private player!:
         Phaser.Physics.Arcade.Sprite
-
-    private patagoras!:
-        Patagoras
 
     private inventory!:
         InventorySystem
@@ -263,7 +256,7 @@ export class GameScene
         // Camada de colisão personalizada desenhada no Tiled
         const layerColisao = this.criarCamada(map, 'colisao', tilesets, mapOriginX, mapOriginY)
         layerColisao?.setVisible(false)
-
+        
         this.layerParedesInvisiveis = layerParedesInvisiveis
 
         this.createTestTextures()
@@ -276,14 +269,6 @@ export class GameScene
                 'player',
             )
         this.player.setDepth(5)
-
-        // PATÁGORAS
-        this.patagoras =
-            new Patagoras(
-                this,
-                550,
-                460,
-            )
 
         // LIMITES FÍSICOS DO MUNDO
         this.physics.world
@@ -339,17 +324,6 @@ export class GameScene
             .bindActor(
                 this.player,
             )
-
-        this.collision.walls
-            .bindActor(
-                this.patagoras.sprite,
-            )
-
-        // TESTE TEMPORÁRIO DE MOVIMENTO
-        this.patagoras.moveTowards(
-            700,
-            460,
-        )
 
         // ITENS DE TESTE
         this.spawnTestPickups()
@@ -471,12 +445,6 @@ export class GameScene
     }
 
     update(): void {
-
-        // TESTE TEMPORÁRIO DO PATÁGORAS
-        this.patagoras.setVelocity(
-            1,
-            0,
-        )
 
         // ABRE MENU COM ESC
         if (
@@ -609,13 +577,6 @@ export class GameScene
             16,
             16,
             0x3498db,
-        )
-
-        this.createSolidTexture(
-            'patagoras',
-            20,
-            20,
-            0xe74c3c,
         )
 
         TEST_ITEMS.forEach(
