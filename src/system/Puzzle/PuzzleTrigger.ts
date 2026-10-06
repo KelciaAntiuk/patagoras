@@ -1,10 +1,16 @@
 import Phaser from 'phaser'
 import type { PuzzleId } from '../../puzzles'
+import { PuzzleEstado } from './Puzzle.types'
 
 const TEXTURA = 'puzzle-gatilho'
 const TAMANHO = 20
 
-/** Ponto do mapa que abre um puzzle quando o jogador interage (E) perto dele. */
+const DICAS: Record<PuzzleEstado, string> = {
+  [PuzzleEstado.Disponivel]: '[E] Puzzle',
+  [PuzzleEstado.Bloqueado]: 'Trancado',
+  [PuzzleEstado.Resolvido]: 'Resolvido',
+}
+
 export class PuzzleTrigger {
   readonly sprite: Phaser.GameObjects.Image
   private readonly dica: Phaser.GameObjects.Text
@@ -20,7 +26,7 @@ export class PuzzleTrigger {
     this.sprite = scene.add.image(x, y, TEXTURA).setDepth(4)
 
     this.dica = scene.add
-      .text(x, y - TAMANHO, '[E] Puzzle', {
+      .text(x, y - TAMANHO, '', {
         fontSize: '12px',
         color: '#ffffff',
         backgroundColor: '#000000aa',
@@ -31,8 +37,9 @@ export class PuzzleTrigger {
       .setVisible(false)
   }
 
-  setFocado(focado: boolean): void {
-    this.dica.setVisible(focado)
+  mostrarDica(estado: PuzzleEstado | null): void {
+    this.dica.setVisible(estado !== null)
+    if (estado) this.dica.setText(DICAS[estado])
   }
 
   destroy(): void {

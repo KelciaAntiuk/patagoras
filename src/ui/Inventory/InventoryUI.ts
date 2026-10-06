@@ -10,7 +10,6 @@ const PADDING = 14
 export class InventoryUI extends Phaser.GameObjects.Container {
   private readonly slotViews: InventorySlotUI[] = []
 
-  /** Com `onSelect`, clicar em um slot com item chama o callback com o item e o índice do slot. */
   constructor(
     scene: Phaser.Scene,
     inventory: InventorySystem,
@@ -43,7 +42,6 @@ export class InventoryUI extends Phaser.GameObjects.Container {
     this.sync(inventory.getSlots())
     const onChange = (slots: readonly InventorySlot[]): void => this.sync(slots)
     inventory.on(INVENTORY_EVENTS.CHANGED, onChange)
-    // O inventário vive mais que a UI (ex.: a UI do modal de puzzle é recriada a cada abertura).
     this.once(Phaser.GameObjects.Events.DESTROY, () => inventory.off(INVENTORY_EVENTS.CHANGED, onChange))
   }
 

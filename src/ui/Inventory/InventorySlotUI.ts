@@ -13,7 +13,6 @@ export class InventorySlotUI extends Phaser.GameObjects.Container {
   private icon?: Phaser.GameObjects.Image
   private slot: InventorySlot = null
 
-  /** Com `onSelect`, o slot vira clicável quando tiver um item. */
   constructor(scene: Phaser.Scene, x: number, y: number, onSelect?: (item: ItemDefinition) => void) {
     super(scene, x, y)
 

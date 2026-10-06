@@ -1,47 +1,67 @@
 import type Phaser from 'phaser'
+import type { PuzzleId } from '../../puzzles'
+import type { ItemDefinition, ItemId } from '../Inventory/Inventory.types'
 import type { InventorySystem } from '../Inventory/InventorySystem'
 
 export const PUZZLE_EVENTS = {
-  /** Puzzle abriu. Payload: `puzzleId`. */
   OPENED: 'puzzle-opened',
-  /** Jogador resolveu o puzzle. Payload: `puzzleId`. Sempre seguido de CLOSED. */
   SOLVED: 'puzzle-solved',
-  /** Puzzle fechou, por qualquer motivo. Payload: `PuzzleFechamento`. */
+  FAILED: 'puzzle-failed',
   CLOSED: 'puzzle-closed',
 } as const
 
 export const PuzzleCloseReason = {
-  /** ESC ou botão X. */
   Jogador: 'jogador',
-  /** O Patágoras pegou o jogador com o puzzle aberto. */
   Atacado: 'atacado',
-  /** O puzzle foi resolvido. */
   Resolvido: 'resolvido',
-  /** A GameScene foi encerrada (reiniciar, sair...). */
   Encerrado: 'encerrado',
 } as const
 
 export type PuzzleCloseReason = (typeof PuzzleCloseReason)[keyof typeof PuzzleCloseReason]
 
 export interface PuzzleFechamento {
-  readonly puzzleId: string
+  readonly puzzleId: PuzzleId
   readonly motivo: PuzzleCloseReason
 }
 
-/**
- * Tudo que um puzzle concreto recebe da base. O puzzle só precisa
- * desenhar dentro de `area` e chamar `resolver()` quando o jogador acertar;
- * abrir, fechar, overlay, inventário e ataque do Patágoras ficam por conta da base.
- */
+export const PuzzleEstado = {
+  Bloqueado: 'bloqueado',
+  Disponivel: 'disponivel',
+  Resolvido: 'resolvido',
+} as const
+
+export type PuzzleEstado = (typeof PuzzleEstado)[keyof typeof PuzzleEstado]
+
+/** Número: aceita item numérico com esse valor. Texto: aceita o item com esse id. */
+export type RespostaSlot = number | ItemId
+
+interface PuzzleBaseDef {
+  readonly titulo: string
+  readonly requisitos?: readonly PuzzleId[]
+}
+
+export interface SlotsPuzzleDef extends PuzzleBaseDef {
+  readonly tipo: 'slots'
+  readonly enunciado: string
+  readonly slots: readonly { readonly rotulo?: string; readonly resposta: RespostaSlot }[]
+}
+
+export interface NotaPuzzleDef extends PuzzleBaseDef {
+  readonly tipo: 'nota'
+  readonly texto: string
+}
+
+export type PuzzleDefinicao = SlotsPuzzleDef | NotaPuzzleDef
+
 export interface PuzzleContexto {
-  /** Cena do modal — use para criar game objects, tweens, timers e teclas. */
   readonly cena: Phaser.Scene
-  /** Região livre do modal, entre o título e o inventário. */
   readonly area: Phaser.Geom.Rectangle
-  /** Inventário do jogador. Alterações aparecem na hora na barra do modal e no HUD. */
   readonly inventario: InventorySystem
-  /** Marca o puzzle como resolvido e fecha o modal. */
   resolver(): void
-  /** Fecha o modal sem resolver. */
+  errar(): void
   fechar(): void
+}
+
+export function itemAtende(item: ItemDefinition, resposta: RespostaSlot): boolean {
+  return typeof resposta === 'number' ? item.kind === 'number' && item.value === resposta : item.id === resposta
 }

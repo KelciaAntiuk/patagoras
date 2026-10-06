@@ -451,7 +451,6 @@ export class GameScene
                 },
             )
 
-        // GATILHO DE TESTE (abre o puzzle com E)
         this.puzzles
             .adicionarGatilho(
                 PUZZLE_TESTE_X,
@@ -592,9 +591,6 @@ export class GameScene
 
     update(): void {
 
-        // COM O PUZZLE ABERTO O JOGADOR FICA PARADO
-        // (ESC e cliques são do puzzle), MAS O
-        // PATÁGORAS CONTINUA ANDANDO
         const puzzleAberto =
             this.puzzles.aberto
 
@@ -673,12 +669,9 @@ export class GameScene
         // MAIS PRÓXIMO DO PLAYER
         this.collision.update()
 
-        // ATUALIZA QUAL GATILHO DE
-        // PUZZLE ESTÁ AO ALCANCE
         this.puzzles.update()
 
         // E = COLETA ITEM OU ABRE PUZZLE
-        // (item tem prioridade)
         if (
             Phaser.Input.Keyboard
                 .JustDown(

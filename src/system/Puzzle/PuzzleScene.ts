@@ -2,20 +2,18 @@ import Phaser from 'phaser'
 import { Botao } from '../../menu/botao'
 import { alternanciaLiberada } from '../../ui/atalhos'
 import { InventoryUI } from '../../ui/Inventory/InventoryUI'
-import { PUZZLES } from '../../puzzles'
-import type { PuzzleId } from '../../puzzles'
-import type { InventorySystem } from '../Inventory/InventorySystem'
 import type { Puzzle } from './Puzzle'
+import type { PuzzleContexto, PuzzleDefinicao } from './Puzzle.types'
+import { criarPuzzle } from './tipos'
+import { ESTILO_TEXTO } from './tipos/estilo'
 
 import painel from '../../menu/painel.png'
 import btnX from '../../menu/btn-x.png'
 
 export const PUZZLE_SCENE_KEY = 'PuzzleScene'
 
-/** Mais claro que o menu de pausa: o jogador precisa enxergar o Patágoras chegando. */
 const ESCURIDAO = 0.45
 
-/** painel.png esticado em 9 partes: tamanho em pixels da textura (escala 2 na tela). */
 const ESCALA = 2
 const PAINEL_LARGURA = 280
 const PAINEL_ALTURA = 190
@@ -25,22 +23,11 @@ const BORDA = PAINEL_CANTO * ESCALA
 const ALTURA_CABECALHO = 36
 const ALTURA_INVENTARIO = 84
 
-/** Dados que o `PuzzleSystem` passa ao abrir o modal. */
-export interface PuzzleSceneDados {
-  readonly puzzleId: PuzzleId
-  readonly inventario: InventorySystem
-  readonly resolver: () => void
-  readonly fechar: () => void
+export type PuzzleSceneDados = Omit<PuzzleContexto, 'cena' | 'area'> & {
+  readonly definicao: PuzzleDefinicao
 }
 
-/**
- * Modal genérico que hospeda qualquer puzzle.
- *
- * Roda por cima da GameScene **sem pausá-la** — é isso que permite o
- * Patágoras continuar perseguindo o jogador enquanto o puzzle está aberto.
- * Quem decide abrir/fechar é o `PuzzleSystem`; esta cena só desenha a
- * moldura, o inventário e repassa ESC/X para ele.
- */
+// Não pausa a GameScene: o Patágoras precisa continuar andando com o puzzle aberto.
 export class PuzzleScene extends Phaser.Scene {
   private dados!: PuzzleSceneDados
   private escape!: Phaser.Input.Keyboard.Key
@@ -62,7 +49,6 @@ export class PuzzleScene extends Phaser.Scene {
     const L = this.scale.width
     const A = this.scale.height
 
-    // Bloqueia cliques no que estiver atrás do modal.
     this.add.rectangle(0, 0, L, A, 0x05080c, ESCURIDAO).setOrigin(0).setInteractive()
 
     const moldura = this.add
@@ -83,15 +69,10 @@ export class PuzzleScene extends Phaser.Scene {
       interior.height - ALTURA_CABECALHO - ALTURA_INVENTARIO - 12,
     )
 
-    const puzzle: Puzzle = new PUZZLES[dados.puzzleId]({
-      cena: this,
-      area,
-      inventario: dados.inventario,
-      resolver: dados.resolver,
-      fechar: dados.fechar,
-    })
+    const { definicao, ...contexto } = dados
+    const puzzle = criarPuzzle({ ...contexto, cena: this, area }, definicao)
 
-    this.criarCabecalho(interior, puzzle.titulo)
+    this.criarCabecalho(interior, definicao.titulo)
     this.criarInventario(interior, puzzle)
 
     this.escape = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ESC)
@@ -134,11 +115,7 @@ export class PuzzleScene extends Phaser.Scene {
     )
 
     this.add
-      .text(interior.centerX - inventario.getBounds().width / 2 - 14, y, 'Inventário', {
-        fontFamily: '"Patrick Hand", Georgia, serif',
-        fontSize: '18px',
-        color: '#e8d9bf',
-      })
+      .text(interior.centerX - inventario.getBounds().width / 2 - 14, y, 'Inventário', { ...ESTILO_TEXTO, color: '#e8d9bf' })
       .setOrigin(1, 0.5)
   }
 }
