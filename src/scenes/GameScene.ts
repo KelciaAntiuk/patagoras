@@ -34,6 +34,22 @@ import {
 } from '../system/Inventory/InventorySystem'
 
 import {
+    FoodThrowSystem,
+} from '../system/Inventory/Food/FoodThrowSystem'
+
+import {
+    FOOD_EVENTS,
+} from '../system/Inventory/Food/Food.events'
+
+import {
+    PlayerLifeSystem,
+} from '../characters/Player/PlayerLifeSystem'
+
+import {
+    PLAYER_LIFE_EVENTS,
+} from '../characters/Player/Player.events'
+
+import {
     Patagoras,
 } from '../characters/Patagoras/Patagoras'
 
@@ -148,6 +164,12 @@ export class GameScene
     private inventory!:
         InventorySystem
 
+    private foodThrow!:
+        FoodThrowSystem
+
+    private playerLife!:
+        PlayerLifeSystem
+
     private collision!:
         CollisionSystem
 
@@ -172,6 +194,9 @@ export class GameScene
     private interactKey!:
         Phaser.Input.Keyboard.Key
 
+    private foodKey!:
+        Phaser.Input.Keyboard.Key
+
     private debugKey!:
         Phaser.Input.Keyboard.Key
 
@@ -179,6 +204,9 @@ export class GameScene
         Phaser.GameObjects.Text
 
     private statusText!:
+        Phaser.GameObjects.Text
+
+    private livesText!:
         Phaser.GameObjects.Text
 
     private pickupRadiusDebug!:
@@ -306,6 +334,10 @@ export class GameScene
             )
         this.player.setDepth(5)
 
+        // SISTEMA DE VIDAS DO PLAYER
+        this.playerLife =
+            new PlayerLifeSystem()
+
         // PATÁGORAS
         this.patagoras =
             new Patagoras(
@@ -405,9 +437,13 @@ export class GameScene
         this.patagorasHit.on(
             PATAGORAS_EVENTS.HIT_PLAYER,
             () => {
-                console.log(
-                    'Patágoras acertou o jogador!',
-                )
+                const tookDamage =
+                    this.playerLife
+                        .takeDamage()
+
+                if (!tookDamage) {
+                    return
+                }
 
                 this.patagorasAI.stun(
                     PATAGORAS_CONFIG
@@ -415,6 +451,17 @@ export class GameScene
                 )
             },
         )
+
+        // SISTEMA DE COMIDA
+        this.foodThrow =
+            new FoodThrowSystem(
+                this,
+                this.player,
+                this.patagoras,
+                this.patagorasAI,
+                this.inventory,
+                this.collision,
+            )
 
         // ITENS DE TESTE
         this.spawnTestPickups()
@@ -486,6 +533,14 @@ export class GameScene
                         .KeyCodes.E,
                 )
 
+        // Q = USAR / ARREMESSAR COMIDA
+        this.foodKey =
+            this.input.keyboard!
+                .addKey(
+                    Phaser.Input.Keyboard
+                        .KeyCodes.Q,
+                )
+
         // F3 = DEBUG
         this.debugKey =
             this.input.keyboard!
@@ -502,17 +557,23 @@ export class GameScene
         this.events.once(
             'shutdown',
             () => {
-                this.collision
+                this.foodThrow
                     .destroy()
-
-                this.inventory
-                    .removeAllListeners()
 
                 this.patagorasAI
                     .destroy()
 
                 this.patagorasHit
                     .destroy()
+
+                this.playerLife
+                    .destroy()
+
+                this.collision
+                    .destroy()
+
+                this.inventory
+                    .removeAllListeners()
 
                 this.patagoras
                     .destroy()
@@ -526,7 +587,9 @@ export class GameScene
         }
     }
 
-    private abrirMenu(): void {
+    private abrirMenu(
+        gameOver = false,
+    ): void {
         if (
             this.scene.isActive(
                 'MenuScene',
@@ -539,6 +602,9 @@ export class GameScene
 
         this.scene.launch(
             'MenuScene',
+            {
+                gameOver,
+            },
         )
 
         this.scene.pause()
@@ -600,13 +666,18 @@ export class GameScene
             direction.normalize()
         }
 
+        const playerSpeed =
+            PLAYER_SPEED *
+            this.foodThrow
+                .getPlayerSpeedMultiplier()
+
         this.player
             .setVelocity(
                 direction.x *
-                PLAYER_SPEED,
+                playerSpeed,
 
                 direction.y *
-                PLAYER_SPEED,
+                playerSpeed,
             )
 
         // ATUALIZA IA DO PATÁGORAS
@@ -625,6 +696,17 @@ export class GameScene
         ) {
             this.collision
                 .tryCollect()
+        }
+
+        // USA / ARREMESSA COMIDA COM Q
+        if (
+            Phaser.Input.Keyboard
+                .JustDown(
+                    this.foodKey,
+                )
+        ) {
+            this.foodThrow
+                .tryUseFood()
         }
 
         // LIGA/DESLIGA DEBUG COM F3
@@ -867,7 +949,7 @@ export class GameScene
                 16,
                 16,
 
-                'Mover: WASD/setas | Coletar: E | Menu: ESC | Debug: F3',
+                'Mover: WASD/setas | Coletar: E | Comida: Q | Menu: ESC | Debug: F3',
 
                 {
                     fontSize:
@@ -913,11 +995,36 @@ export class GameScene
                 .setScrollFactor(0)
                 .setDepth(100000)
 
-        this.statusText =
+        this.livesText =
             this.add
                 .text(
                     16,
                     145,
+                    '',
+                    {
+                        fontSize:
+                            '16px',
+
+                        color:
+                            '#ffffff',
+
+                        backgroundColor:
+                            '#000000aa',
+
+                        padding: {
+                            x: 8,
+                            y: 6,
+                        },
+                    },
+                )
+                .setScrollFactor(0)
+                .setDepth(100000)
+
+        this.statusText =
+            this.add
+                .text(
+                    16,
+                    185,
 
                     'Aproxime-se de um item.',
 
@@ -949,6 +1056,13 @@ export class GameScene
         this.updateInventoryHud(
             this.inventory
                 .getSlots(),
+        )
+
+        this.updateLivesHud(
+            this.playerLife
+                .getLives(),
+            this.playerLife
+                .getMaxLives(),
         )
     }
 
@@ -1021,6 +1135,97 @@ export class GameScene
                     )
             },
         )
+
+        this.foodThrow.on(
+            FOOD_EVENTS.NO_FOOD,
+            () => {
+                this.statusText
+                    .setText(
+                        'Você não possui comida.',
+                    )
+            },
+        )
+
+        this.foodThrow.on(
+            FOOD_EVENTS.BUSY,
+            () => {
+                this.statusText
+                    .setText(
+                        'A comida já está sendo arremessada.',
+                    )
+            },
+        )
+
+        this.foodThrow.on(
+            FOOD_EVENTS.THROW_STARTED,
+            () => {
+                this.statusText
+                    .setText(
+                        'Comida arremessada.',
+                    )
+            },
+        )
+
+        this.foodThrow.on(
+            FOOD_EVENTS.LANDED,
+            () => {
+                this.statusText
+                    .setText(
+                        'A comida caiu no chão.',
+                    )
+            },
+        )
+
+        this.foodThrow.on(
+            FOOD_EVENTS.HIT_PATAGORAS,
+            () => {
+                this.statusText
+                    .setText(
+                        'Patágoras comeu a comida e dormiu.',
+                    )
+            },
+        )
+
+        this.playerLife.on(
+            PLAYER_LIFE_EVENTS.CHANGED,
+            (
+                lives: number,
+                maxLives: number,
+            ) => {
+                this.updateLivesHud(
+                    lives,
+                    maxLives,
+                )
+
+                if (lives > 0) {
+                    this.statusText
+                        .setText(
+                            `Patágoras acertou você! Vidas restantes: ${lives}.`,
+                        )
+                }
+            },
+        )
+
+        this.playerLife.on(
+            PLAYER_LIFE_EVENTS.GAME_OVER,
+            () => {
+                this.player
+                    .setVelocity(
+                        0,
+                        0,
+                    )
+
+                this.patagoras
+                    .stop()
+
+                this.statusText
+                    .setText(
+                        'GAME OVER',
+                    )
+
+                this.abrirMenu(true)
+            },
+        )
     }
 
     private updateInventoryHud(
@@ -1043,6 +1248,28 @@ export class GameScene
                 'Inventário de teste:',
                 ...lines,
             ])
+    }
+
+    private updateLivesHud(
+        lives: number,
+        maxLives: number,
+    ): void {
+
+        const full =
+            '♥'.repeat(lives)
+
+        const empty =
+            '♡'.repeat(
+                Math.max(
+                    0,
+                    maxLives - lives,
+                ),
+            )
+
+        this.livesText
+            .setText(
+                `Vidas: ${full}${empty}`,
+            )
     }
 
     private updatePickupRadiusDebug():
