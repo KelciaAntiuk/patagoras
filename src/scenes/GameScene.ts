@@ -61,6 +61,10 @@ import {
     PuzzleSystem,
 } from '../system/Puzzle/PuzzleSystem'
 
+import type {
+    PuzzleId,
+} from '../puzzles'
+
 import {
     PUZZLE_EVENTS,
     PuzzleCloseReason,
@@ -77,8 +81,19 @@ const WORLD_HEIGHT = 1800
 
 const PICKUP_RADIUS = 90
 
+const SPAWN_JOGADOR_X = 470
+const SPAWN_JOGADOR_Y = 600
+
 const PUZZLE_TESTE_X = 480
 const PUZZLE_TESTE_Y = 660
+
+const BARREIRA_COZINHA_X = 255
+const BARREIRA_COZINHA_Y = 482
+const BARREIRA_COZINHA_L = 16
+const BARREIRA_COZINHA_A = 30
+
+const GATILHO_COZINHA_X = 272
+const GATILHO_COZINHA_Y = 482
 
 const TEST_ITEMS:
     readonly ItemDefinition[] = [
@@ -123,6 +138,17 @@ const TEST_ITEMS:
                 ItemKind.Food,
         },
         {
+            id: 'number-six',
+            name: 'Número 6',
+            description:
+                'Um seis de metal, arrancado de alguma porta.',
+            textureKey:
+                'test-item-six',
+            kind:
+                ItemKind.Number,
+            value: 6,
+        },
+        {
             id: 'number-seven',
             name: 'Número 7',
             description:
@@ -135,7 +161,61 @@ const TEST_ITEMS:
         },
     ]
 
+const ITENS_BIBLIOTECA: readonly {
+    readonly item: ItemDefinition
+    readonly x: number
+    readonly y: number
+    readonly cor: number
+}[] = [
+    {
+        item: {
+            id: 'number-three',
+            name: 'Número 3',
+            description:
+                'Um três de metal. Parece ter saído de uma porta de armário.',
+            textureKey:
+                'item-numero-3',
+            kind: ItemKind.Number,
+            value: 3,
+        },
+        x: 160,
+        y: 500,
+        cor: 0xff7675,
+    },
+    {
+        item: {
+            id: 'number-eight',
+            name: 'Número 8',
+            description:
+                'Um oito de metal, caído perto da entrada.',
+            textureKey:
+                'item-numero-8',
+            kind: ItemKind.Number,
+            value: 8,
+        },
+        x: 520,
+        y: 450,
+        cor: 0x74b9ff,
+    },
+    {
+        item: {
+            id: 'number-one',
+            name: 'Número 1',
+            description:
+                'Um um de metal, esquecido entre as mesas.',
+            textureKey:
+                'item-numero-1',
+            kind: ItemKind.Number,
+            value: 1,
+        },
+        x: 400,
+        y: 630,
+        cor: 0xffeaa7,
+    },
+]
+
 const TEST_ITEM_COLORS = [
+    0x16a085,
     0xf1c40f,
     0xecf0f1,
     0x9b59b6,
@@ -210,6 +290,12 @@ export class GameScene
         Phaser.Tilemaps.Tile[] = []
 
     private debugVisible = false
+
+    private barreiraCozinha?:
+        Phaser.GameObjects.Rectangle
+
+    private barreiraCozinhaCollider?:
+        Phaser.Physics.Arcade.Collider
 
     constructor() {
         super('GameScene')
@@ -319,8 +405,8 @@ export class GameScene
         // PERSONAGEM (bloco 16x16 posicionado dentro da casa)
         this.player =
             this.physics.add.sprite(
-                400,
-                460,
+                SPAWN_JOGADOR_X,
+                SPAWN_JOGADOR_Y,
                 'player',
             )
         this.player.setDepth(5)
@@ -458,8 +544,19 @@ export class GameScene
                 'teste',
             )
 
+        this.puzzles
+            .adicionarGatilho(
+                GATILHO_COZINHA_X,
+                GATILHO_COZINHA_Y,
+                'entrada-cozinha',
+            )
+
+        this.criarBarreiraDaCozinha()
+
         // ITENS DE TESTE
         this.spawnTestPickups()
+
+        this.spawnItensDaBiblioteca()
 
         // LIMITES DA CÂMERA
         this.cameras.main
@@ -680,14 +777,16 @@ export class GameScene
             !puzzleAberto
         ) {
             if (
-                this.collision.pickups
-                    .getFocused()
-            ) {
-                this.collision
-                    .tryCollect()
-            } else {
-                this.puzzles
+                !this.puzzles
                     .interagir()
+            ) {
+                if (
+                    this.collision.pickups
+                        .getFocused()
+                ) {
+                    this.collision
+                        .tryCollect()
+                }
             }
         }
 
@@ -877,6 +976,86 @@ export class GameScene
         return rects
     }
 
+    private criarBarreiraDaCozinha():
+        void {
+
+        const barreira = this.add
+            .rectangle(
+                BARREIRA_COZINHA_X,
+                BARREIRA_COZINHA_Y,
+                BARREIRA_COZINHA_L,
+                BARREIRA_COZINHA_A,
+                0x6b4526,
+            )
+
+        barreira.setStrokeStyle(
+            2,
+            0x2f1d0e,
+        )
+
+        barreira.setDepth(5)
+
+        this.physics.add.existing(
+            barreira,
+            true,
+        )
+
+        this.barreiraCozinha =
+            barreira
+
+        this.barreiraCozinhaCollider =
+            this.physics.add.collider(
+                this.player,
+                barreira,
+            )
+
+    }
+
+    private abrirCozinha():
+        void {
+
+        if (!this.barreiraCozinha) return
+
+        this.barreiraCozinhaCollider
+            ?.destroy()
+
+        this.barreiraCozinha.destroy()
+
+        this.barreiraCozinhaCollider =
+            undefined
+
+        this.barreiraCozinha =
+            undefined
+
+        this.statusText
+            .setText(
+                'A cozinha foi destrancada.',
+            )
+    }
+
+    private spawnItensDaBiblioteca():
+        void {
+
+        ITENS_BIBLIOTECA.forEach(
+            (entrada) => {
+                this.createSolidTexture(
+                    entrada.item
+                        .textureKey,
+                    26,
+                    26,
+                    entrada.cor,
+                )
+
+                this.collision
+                    .spawnPickup(
+                        entrada.x,
+                        entrada.y,
+                        entrada.item,
+                    )
+            },
+        )
+    }
+
     private spawnTestPickups():
         void {
 
@@ -898,8 +1077,12 @@ export class GameScene
                 y: 480,
             },
             {
-                x: 320,
-                y: 480,
+                x: 430,
+                y: 430,
+            },
+            {
+                x: 380,
+                y: 440,
             },
         ]
 
@@ -1090,7 +1273,18 @@ export class GameScene
             PUZZLE_EVENTS
                 .SOLVED,
 
-            () => {
+            (
+                puzzleId: PuzzleId,
+            ) => {
+                if (
+                    puzzleId ===
+                    'entrada-cozinha'
+                ) {
+                    this.abrirCozinha()
+
+                    return
+                }
+
                 this.statusText
                     .setText(
                         'Puzzle resolvido!',
