@@ -37,6 +37,10 @@ import {
     Patagoras,
 } from '../characters/Patagoras/Patagoras'
 
+import {
+    PatagorasAI,
+} from '../characters/Patagoras/PatagorasAI'
+
 const PLAYER_SPEED = 180
 
 const WORLD_WIDTH = 2400
@@ -115,6 +119,9 @@ export class GameScene
 
     private patagoras!:
         Patagoras
+
+    private patagorasAI!:
+        PatagorasAI
 
     private inventory!:
         InventorySystem
@@ -285,6 +292,12 @@ export class GameScene
                 460,
             )
 
+        this.patagorasAI =
+            new PatagorasAI(
+                this.patagoras,
+                this.player,
+            )
+
         // LIMITES FÍSICOS DO MUNDO
         this.physics.world
             .setBounds(
@@ -344,12 +357,6 @@ export class GameScene
             .bindActor(
                 this.patagoras.sprite,
             )
-
-        // TESTE TEMPORÁRIO DE MOVIMENTO
-        this.patagoras.moveTowards(
-            700,
-            460,
-        )
 
         // ITENS DE TESTE
         this.spawnTestPickups()
@@ -442,6 +449,10 @@ export class GameScene
 
                 this.inventory
                     .removeAllListeners()
+
+
+                this.patagoras
+                    .destroy()
             },
         )
 
@@ -471,12 +482,6 @@ export class GameScene
     }
 
     update(): void {
-
-        // TESTE TEMPORÁRIO DO PATÁGORAS
-        this.patagoras.setVelocity(
-            1,
-            0,
-        )
 
         // ABRE MENU COM ESC
         if (
@@ -540,6 +545,9 @@ export class GameScene
                 direction.y *
                 PLAYER_SPEED,
             )
+
+        // ATUALIZA IA DO PATÁGORAS
+        this.patagorasAI.update()
 
         // ATUALIZA QUAL ITEM ESTÁ
         // MAIS PRÓXIMO DO PLAYER
