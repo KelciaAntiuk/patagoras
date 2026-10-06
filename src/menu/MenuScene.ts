@@ -11,8 +11,13 @@ import btnPausaHover from './btn-pausa-hover.png'
 import btnReiniciarHover from './btn-reiniciar-hover.png'
 import btnSairHover from './btn-sair-hover.png'
 
+type MenuSceneData = {
+  gameOver?: boolean
+}
+
 export class MenuScene extends Phaser.Scene {
   private escape!: Phaser.Input.Keyboard.Key
+  private gameOver = false
 
   constructor() {
     super('MenuScene')
@@ -28,43 +33,150 @@ export class MenuScene extends Phaser.Scene {
     this.load.image('btn-sair-hover', btnSairHover)
   }
 
-  create(): void {
-    for (const chave of ['btn-pausa', 'btn-pausa-hover', 'btn-reiniciar', 'btn-reiniciar-hover', 'btn-sair', 'btn-sair-hover']) {
-      this.textures.get(chave).setFilter(Phaser.Textures.FilterMode.NEAREST)
+  create(data: MenuSceneData = {}): void {
+    this.gameOver = data.gameOver === true
+
+    for (const chave of [
+      'btn-pausa',
+      'btn-pausa-hover',
+      'btn-reiniciar',
+      'btn-reiniciar-hover',
+      'btn-sair',
+      'btn-sair-hover',
+    ]) {
+      this.textures
+        .get(chave)
+        .setFilter(
+          Phaser.Textures.FilterMode.NEAREST,
+        )
     }
 
-    const { interior } = montarPainel(this, 'painel-pausa', 0.45)
+    const { interior } =
+      montarPainel(
+        this,
+        'painel-pausa',
+        0.45,
+      )
 
     this.add
-      .text(interior.centerX, interior.top + 2, 'PAUSA', {
-        fontFamily: 'LazyFox, monospace',
-        fontSize: '33px',
-        color: '#f4efe4',
-      })
+      .text(
+        interior.centerX,
+        interior.top + 2,
+        this.gameOver
+          ? 'GAME OVER'
+          : 'PAUSA',
+        {
+          fontFamily:
+            'LazyFox, monospace',
+          fontSize: '33px',
+          color: '#f4efe4',
+        },
+      )
       .setOrigin(0.5, 0)
       .setStroke('#0b1219', 6)
-      .setShadow(0, 0, '#000000', 10, true, true)
+      .setShadow(
+        0,
+        0,
+        '#000000',
+        10,
+        true,
+        true,
+      )
 
     const alturaBotao = 60
     const vao = 8
-    const primeiro = interior.top + 44 + alturaBotao / 2
     const passo = alturaBotao + vao
-    new Botao(this, interior.centerX, primeiro, 'btn-pausa', () => this.retomar())
-    new Botao(this, interior.centerX, primeiro + passo, 'btn-reiniciar', () => this.reiniciar())
-    new Botao(this, interior.centerX, primeiro + passo * 2, 'btn-sair', () => this.sair())
 
-    this.escape = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ESC)
+    if (this.gameOver) {
+      const primeiro =
+        interior.top +
+        76 +
+        alturaBotao / 2
+
+      new Botao(
+        this,
+        interior.centerX,
+        primeiro,
+        'btn-reiniciar',
+        () => this.reiniciar(),
+      )
+
+      new Botao(
+        this,
+        interior.centerX,
+        primeiro + passo,
+        'btn-sair',
+        () => this.sair(),
+      )
+    } else {
+      const primeiro =
+        interior.top +
+        44 +
+        alturaBotao / 2
+
+      new Botao(
+        this,
+        interior.centerX,
+        primeiro,
+        'btn-pausa',
+        () => this.retomar(),
+      )
+
+      new Botao(
+        this,
+        interior.centerX,
+        primeiro + passo,
+        'btn-reiniciar',
+        () => this.reiniciar(),
+      )
+
+      new Botao(
+        this,
+        interior.centerX,
+        primeiro + passo * 2,
+        'btn-sair',
+        () => this.sair(),
+      )
+    }
+
+    this.escape =
+      this.input.keyboard!
+        .addKey(
+          Phaser.Input.Keyboard.KeyCodes.ESC,
+        )
+
     this.escape.reset()
   }
 
   update(): void {
-    if (!Phaser.Input.Keyboard.JustDown(this.escape)) return
-    if (!alternanciaLiberada(this.game, 'esc')) return
+    if (this.gameOver) {
+      return
+    }
+
+    if (
+      !Phaser.Input.Keyboard
+        .JustDown(this.escape)
+    ) {
+      return
+    }
+
+    if (
+      !alternanciaLiberada(
+        this.game,
+        'esc',
+      )
+    ) {
+      return
+    }
 
     this.retomar()
   }
 
   private retomar(): void {
+    if (this.gameOver) {
+      return
+    }
+
     this.scene.resume('GameScene')
     this.scene.stop()
   }
@@ -72,7 +184,12 @@ export class MenuScene extends Phaser.Scene {
   private reiniciar(): void {
     this.scene.stop('GameScene')
 
-    this.scene.start('GameScene', { abrirMenu: false })
+    this.scene.start(
+      'GameScene',
+      {
+        abrirMenu: false,
+      },
+    )
   }
 
   private sair(): void {
