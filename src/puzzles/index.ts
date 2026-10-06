@@ -2,6 +2,7 @@ import type { PuzzleDefinicao } from '../system/Puzzle/Puzzle.types'
 
 export type PuzzleId =
   | 'teste'
+  | 'entrada-cozinha'
   | 'refeitorio'
   | 'cozinha'
   | 'sala-aula-1'
@@ -17,6 +18,17 @@ export const PUZZLES: Record<PuzzleId, PuzzleDefinicao> = {
     titulo: 'Cadeado de teste',
     enunciado: 'Coloque o número que abre o cadeado.\n3 + 4 = ?',
     slots: [{ resposta: 7 }],
+  },
+
+  'entrada-cozinha': {
+    tipo: 'slots',
+    titulo: 'Porta da cozinha',
+    enunciado:
+      'Charada riscada na madeira:\n' +
+      '"Pegue o triplo de meia dúzia\n' +
+      'e tire uma dúzia inteira.\n' +
+      'O que sobrar destranca a porta."',
+    slots: [{ rotulo: 'abre =', resposta: 6 }],
   },
 
   refeitorio: {

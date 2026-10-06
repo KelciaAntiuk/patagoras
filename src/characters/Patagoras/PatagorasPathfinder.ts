@@ -26,8 +26,8 @@ export class PatagorasPathfinder {
     private readonly rows: number
 
     constructor(
-        private readonly worldWidth: number,
-        private readonly worldHeight: number,
+        worldWidth: number,
+        worldHeight: number,
         private readonly cellSize: number,
         wallRects: readonly WorldRect[],
         obstaclePadding = 6,
