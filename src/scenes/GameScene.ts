@@ -700,9 +700,6 @@ export class GameScene
                 this.foodThrow
                     .destroy()
 
-                this.collision
-                    .destroy()
-
                 this.patagorasAI
                     .destroy()
 
@@ -1407,16 +1404,6 @@ export class GameScene
             },
         )
 
-        this.foodThrow.on(
-            FOOD_EVENTS.NO_FOOD,
-            () => {
-                this.statusText
-                    .setText(
-                        'Você não possui comida.',
-                    )
-            },
-        )
-
         this.puzzles.on(
             PUZZLE_EVENTS
                 .CLOSED,
@@ -1434,6 +1421,16 @@ export class GameScene
                             'O Patágoras te pegou! O puzzle foi fechado.',
                         )
                 }
+            },
+        )
+
+        this.foodThrow.on(
+            FOOD_EVENTS.NO_FOOD,
+            () => {
+                this.statusText
+                    .setText(
+                        'Você não possui comida.',
+                    )
             },
         )
 
