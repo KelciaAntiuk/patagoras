@@ -2,6 +2,7 @@ import Phaser from 'phaser'
 import { GameScene } from './scenes/GameScene'
 import { MenuScene } from './menu/MenuScene'
 import { InicioScene } from './menu/InicioScene'
+import { PuzzleScene } from './system/Puzzle/PuzzleScene'
 import fonteTitulo from './menu/LazyFoxPixel.ttf'
 
 async function carregarFontes(): Promise<void> {
@@ -37,7 +38,7 @@ const config: Phaser.Types.Core.GameConfig = {
       debug: false,
     },
   },
-  scene: [InicioScene, GameScene, MenuScene],
+  scene: [InicioScene, GameScene, PuzzleScene, MenuScene],
 }
 
 await carregarFontes()
