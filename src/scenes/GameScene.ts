@@ -103,13 +103,25 @@ const SPAWN_JOGADOR_Y = 600
 const PUZZLE_TESTE_X = 480
 const PUZZLE_TESTE_Y = 660
 
-const BARREIRA_COZINHA_X = 255
-const BARREIRA_COZINHA_Y = 482
-const BARREIRA_COZINHA_L = 16
-const BARREIRA_COZINHA_A = 30
-
-const GATILHO_COZINHA_X = 272
-const GATILHO_COZINHA_Y = 482
+const PORTAS: readonly {
+    readonly puzzleId: PuzzleId
+    readonly porta: { x: number; y: number; l: number; a: number }
+    readonly gatilho: { x: number; y: number }
+    readonly aoAbrir: string
+}[] = [
+    {
+        puzzleId: 'refeitorio',
+        porta: { x: 475, y: 565, l: 40, a: 42 },
+        gatilho: { x: 475, y: 596 },
+        aoAbrir: 'O refeitório foi destrancado.',
+    },
+    {
+        puzzleId: 'entrada-cozinha',
+        porta: { x: 255, y: 482, l: 16, a: 30 },
+        gatilho: { x: 272, y: 482 },
+        aoAbrir: 'A cozinha foi destrancada.',
+    },
+]
 
 const TEST_ITEMS:
     readonly ItemDefinition[] = [
@@ -177,7 +189,7 @@ const TEST_ITEMS:
         },
     ]
 
-const ITENS_BIBLIOTECA: readonly {
+const ITENS_DOS_PUZZLES: readonly {
     readonly item: ItemDefinition
     readonly x: number
     readonly y: number
@@ -209,8 +221,8 @@ const ITENS_BIBLIOTECA: readonly {
             kind: ItemKind.Number,
             value: 8,
         },
-        x: 520,
-        y: 450,
+        x: 378,
+        y: 600,
         cor: 0x74b9ff,
     },
     {
@@ -224,9 +236,39 @@ const ITENS_BIBLIOTECA: readonly {
             kind: ItemKind.Number,
             value: 1,
         },
-        x: 400,
-        y: 630,
+        x: 520,
+        y: 450,
         cor: 0xffeaa7,
+    },
+    {
+        item: {
+            id: 'refeitorio-numero-1',
+            name: 'Número 1',
+            description:
+                'Um um rabiscado numa bandeja.',
+            textureKey:
+                'item-refeitorio-1',
+            kind: ItemKind.Number,
+            value: 1,
+        },
+        x: 540,
+        y: 606,
+        cor: 0xa29bfe,
+    },
+    {
+        item: {
+            id: 'refeitorio-numero-3',
+            name: 'Número 3',
+            description:
+                'Um três rabiscado numa bandeja.',
+            textureKey:
+                'item-refeitorio-3',
+            kind: ItemKind.Number,
+            value: 3,
+        },
+        x: 530,
+        y: 676,
+        cor: 0x55efc4,
     },
 ]
 
@@ -319,11 +361,14 @@ export class GameScene
 
     private debugVisible = false
 
-    private barreiraCozinha?:
-        Phaser.GameObjects.Rectangle
-
-    private barreiraCozinhaCollider?:
-        Phaser.Physics.Arcade.Collider
+    private readonly barreiras =
+        new Map<
+            PuzzleId,
+            {
+                porta: Phaser.GameObjects.Rectangle
+                colisor: Phaser.Physics.Arcade.Collider
+            }
+        >()
 
     constructor() {
         super('GameScene')
@@ -580,14 +625,7 @@ export class GameScene
                 'teste',
             )
 
-        this.puzzles
-            .adicionarGatilho(
-                GATILHO_COZINHA_X,
-                GATILHO_COZINHA_Y,
-                'entrada-cozinha',
-            )
-
-        this.criarBarreiraDaCozinha()
+        this.criarPortas()
         // SISTEMA DE COMIDA
         this.foodThrow =
             new FoodThrowSystem(
@@ -601,7 +639,7 @@ export class GameScene
         // ITENS DE TESTE
         this.spawnTestPickups()
 
-        this.spawnItensDaBiblioteca()
+        this.spawnItensDosPuzzles()
 
         // LIMITES DA CÂMERA
         this.cameras.main
@@ -1056,67 +1094,89 @@ export class GameScene
         return rects
     }
 
-    private criarBarreiraDaCozinha():
+    private criarPortas():
         void {
 
-        const barreira = this.add
-            .rectangle(
-                BARREIRA_COZINHA_X,
-                BARREIRA_COZINHA_Y,
-                BARREIRA_COZINHA_L,
-                BARREIRA_COZINHA_A,
-                0x6b4526,
-            )
+        this.barreiras.clear()
 
-        barreira.setStrokeStyle(
-            2,
-            0x2f1d0e,
+        PORTAS.forEach(
+            (def) => {
+                this.puzzles
+                    .adicionarGatilho(
+                        def.gatilho.x,
+                        def.gatilho.y,
+                        def.puzzleId,
+                    )
+
+                const porta = this.add
+                    .rectangle(
+                        def.porta.x,
+                        def.porta.y,
+                        def.porta.l,
+                        def.porta.a,
+                        0x6b4526,
+                    )
+
+                porta.setStrokeStyle(
+                    2,
+                    0x2f1d0e,
+                )
+
+                porta.setDepth(5)
+
+                this.physics.add.existing(
+                    porta,
+                    true,
+                )
+
+                this.barreiras.set(
+                    def.puzzleId,
+                    {
+                        porta,
+                        colisor:
+                            this.physics.add.collider(
+                                this.player,
+                                porta,
+                            ),
+                    },
+                )
+            },
         )
-
-        barreira.setDepth(5)
-
-        this.physics.add.existing(
-            barreira,
-            true,
-        )
-
-        this.barreiraCozinha =
-            barreira
-
-        this.barreiraCozinhaCollider =
-            this.physics.add.collider(
-                this.player,
-                barreira,
-            )
-
     }
 
-    private abrirCozinha():
-        void {
+    private abrirPorta(
+        puzzleId: PuzzleId,
+    ): boolean {
 
-        if (!this.barreiraCozinha) return
+        const barreira =
+            this.barreiras.get(puzzleId)
 
-        this.barreiraCozinhaCollider
-            ?.destroy()
+        const def =
+            PORTAS.find(
+                (p) =>
+                    p.puzzleId ===
+                    puzzleId,
+            )
 
-        this.barreiraCozinha.destroy()
+        if (!barreira || !def) return false
 
-        this.barreiraCozinhaCollider =
-            undefined
+        barreira.colisor.destroy()
+        barreira.porta.destroy()
 
-        this.barreiraCozinha =
-            undefined
+        this.barreiras.delete(puzzleId)
 
         this.statusText
             .setText(
-                'A cozinha foi destrancada.',
+                def.aoAbrir,
             )
+
+        return true
     }
 
-    private spawnItensDaBiblioteca():
+    private spawnItensDosPuzzles():
         void {
 
-        ITENS_BIBLIOTECA.forEach(
+        ITENS_DOS_PUZZLES.forEach(
             (entrada) => {
                 this.createSolidTexture(
                     entrada.item
@@ -1389,11 +1449,10 @@ export class GameScene
                 puzzleId: PuzzleId,
             ) => {
                 if (
-                    puzzleId ===
-                    'entrada-cozinha'
+                    this.abrirPorta(
+                        puzzleId,
+                    )
                 ) {
-                    this.abrirCozinha()
-
                     return
                 }
 
