@@ -53,9 +53,14 @@ export const PUZZLES: Record<PuzzleId, PuzzleDefinicao> = {
   'sala-aula-1': {
     tipo: 'slots',
     titulo: 'Sala de aula 1',
-    requisitos: ['cozinha'],
-    enunciado: '2x + 6 = 20',
-    slots: [{ rotulo: 'x =', resposta: 7 }],
+    requisitos: ['entrada-cozinha'],
+    enunciado:
+      'Recado no quadro negro:\n' +
+      '"Quatro fileiras de seis carteiras,\n' +
+      'cinco quebraram na brincadeira.\n' +
+      'Conte as que ainda dão pra sentar\n' +
+      'e a porta da sala vai destrancar."',
+    slots: [{ resposta: 1 }, { resposta: 9 }],
   },
 
   'sala-aula-2': {

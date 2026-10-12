@@ -121,6 +121,12 @@ const PORTAS: readonly {
         gatilho: { x: 272, y: 482 },
         aoAbrir: 'A cozinha foi destrancada.',
     },
+    {
+        puzzleId: 'sala-aula-1',
+        porta: { x: 276, y: 412, l: 32, a: 20 },
+        gatilho: { x: 276, y: 440 },
+        aoAbrir: 'A sala de aula 1 foi destrancada.',
+    },
 ]
 
 const TEST_ITEMS:
@@ -270,6 +276,36 @@ const ITENS_DOS_PUZZLES: readonly {
         y: 676,
         cor: 0x55efc4,
     },
+    {
+        item: {
+            id: 'sala1-numero-1',
+            name: 'Número 1',
+            description:
+                'Um um de giz, desenhado num caco de lousa.',
+            textureKey:
+                'item-sala1-1',
+            kind: ItemKind.Number,
+            value: 1,
+        },
+        x: 300,
+        y: 520,
+        cor: 0xdfe6e9,
+    },
+    {
+        item: {
+            id: 'sala1-numero-9',
+            name: 'Número 9',
+            description:
+                'Um nove de giz, desenhado num caco de lousa.',
+            textureKey:
+                'item-sala1-9',
+            kind: ItemKind.Number,
+            value: 9,
+        },
+        x: 450,
+        y: 515,
+        cor: 0x81ecec,
+    },
 ]
 
 const TEST_ITEM_COLORS = [
@@ -337,6 +373,9 @@ export class GameScene
 
     private foodKey!:
         Phaser.Input.Keyboard.Key
+
+    private dropKeys!:
+        Phaser.Input.Keyboard.Key[]
 
     private debugKey!:
         Phaser.Input.Keyboard.Key
@@ -716,6 +755,17 @@ export class GameScene
                         .KeyCodes.Q,
                 )
 
+        // 1/2/3 = SOLTA O ITEM DO SLOT
+        this.dropKeys = [
+            Phaser.Input.Keyboard.KeyCodes.ONE,
+            Phaser.Input.Keyboard.KeyCodes.TWO,
+            Phaser.Input.Keyboard.KeyCodes.THREE,
+        ].map(
+            (code) =>
+                this.input.keyboard!
+                    .addKey(code),
+        )
+
         // F3 = DEBUG
         this.debugKey =
             this.input.keyboard!
@@ -907,6 +957,19 @@ export class GameScene
             this.foodThrow
                 .tryUseFood()
         }
+
+        // SOLTA ITEM COM 1/2/3
+        this.dropKeys.forEach(
+            (key, index) => {
+                if (
+                    Phaser.Input.Keyboard
+                        .JustDown(key) &&
+                    !puzzleAberto
+                ) {
+                    this.soltarItem(index)
+                }
+            },
+        )
 
         // LIGA/DESLIGA DEBUG COM F3
         if (
@@ -1173,6 +1236,24 @@ export class GameScene
         return true
     }
 
+    private soltarItem(
+        index: number,
+    ): void {
+
+        const item =
+            this.inventory
+                .removeAll(index)
+
+        if (!item) return
+
+        this.collision
+            .spawnPickup(
+                this.player.x,
+                this.player.y + 10,
+                item,
+            )
+    }
+
     private spawnItensDosPuzzles():
         void {
 
@@ -1254,7 +1335,7 @@ export class GameScene
                 16,
                 16,
 
-                'Mover: WASD/setas | Interagir: E | Comida: Q | Menu: ESC | Debug: F3',
+                'WASD: mover | E: interagir | 1/2/3: soltar | Q: comida | ESC: menu | F3: debug',
 
                 {
                     fontSize:
