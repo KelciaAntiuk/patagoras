@@ -90,7 +90,7 @@ import type {
     PuzzleFechamento,
 } from '../system/Puzzle/Puzzle.types'
 
-const PLAYER_SPEED = 180
+const PLAYER_SPEED = 120
 
 const WORLD_WIDTH = 2400
 const WORLD_HEIGHT = 1800
@@ -400,6 +400,13 @@ export class GameScene
 
     private debugVisible = false
 
+    private ultimaDirecao:
+        | 'frente'
+        | 'diagonal-baixo'
+        | 'lado'
+        | 'diagonal-cima'
+        | 'cima' = 'frente'
+
     private readonly barreiras =
         new Map<
             PuzzleId,
@@ -413,7 +420,7 @@ export class GameScene
         super('GameScene')
     }
 
-    preload(): void {
+   preload(): void {
         this.load.image(
             'old-house',
             'assets/tilesets/old house.png',
@@ -432,6 +439,19 @@ export class GameScene
         this.load.tilemapTiledJSON(
             'mapa-principal',
             'assets/maps/mapaPrincipal.json',
+        )
+
+        // Carregamento dos spritesheets do personagem e do Patágoras
+        this.load.spritesheet(
+            'sprite_jogador',
+            'assets/sprites/character/character-sheet.png',
+            { frameWidth: 24, frameHeight: 24 }
+        )
+
+        this.load.spritesheet(
+            'sprite_pato',
+            'assets/sprites/character/pato-sheet.png',
+            { frameWidth: 20, frameHeight: 18 }
         )
     }
 
@@ -514,15 +534,96 @@ export class GameScene
 
         this.createTestTextures()
 
-        // PERSONAGEM (bloco 16x16 posicionado dentro da casa)
+        // Criação do jogador
         this.player =
             this.physics.add.sprite(
                 SPAWN_JOGADOR_X,
                 SPAWN_JOGADOR_Y,
-                'player',
+                'sprite_jogador',
             )
         this.player.setDepth(5)
+        // Hitbox nos pés (12x12) para frame de 24x24 (offset 6, 10)
+        this.player.setSize(12, 12)
+        this.player.setOffset(6, 10)
 
+        // Movimentação do personagem para frente (baixo) - frames 8, 9, 10, 11
+        this.anims.create({
+            key: 'andar-frente',
+            frames: this.anims.generateFrameNumbers('sprite_jogador', { start: 8, end: 11 }),
+            frameRate: 8,
+            repeat: -1,
+        })
+
+        // Movimentação do personagem para diagonal abaixo - frames 14 a 17
+        this.anims.create({
+            key: 'andar-diagonal-baixo',
+            frames: this.anims.generateFrameNumbers('sprite_jogador', { start: 12, end: 15 }),
+            frameRate: 8,
+            repeat: -1,
+        })
+
+        // Movimentação do personagem para os lados (esquerda/direita) - frames 16, 17, 18, 19
+        this.anims.create({
+            key: 'andar-lado',
+            frames: this.anims.generateFrameNumbers('sprite_jogador', { start: 16, end: 19 }),
+            frameRate: 8,
+            repeat: -1,
+        })
+
+        // Movimentação do personagem para diagonal acima - frames 20, 21, 22, 23
+        this.anims.create({
+            key: 'andar-diagonal-cima',
+            frames: this.anims.generateFrameNumbers('sprite_jogador', { start: 20, end: 23 }),
+            frameRate: 8,
+            repeat: -1,
+        })
+
+        // Movimentação do personagem para trás (cima) - frames 24 a 27 (olhando apenas para cima)
+        this.anims.create({
+            key: 'andar-cima',
+            frames: this.anims.generateFrameNumbers('sprite_jogador', { start: 24, end: 27 }),
+            frameRate: 8,
+            repeat: -1,
+        })
+
+        // Animações de parado (Idle) para cada direção
+        this.anims.create({
+            key: 'parado-frente',
+            frames: [{ key: 'sprite_jogador', frame: 0 }],
+            frameRate: 1,
+            repeat: -1,
+        })
+
+        this.anims.create({
+            key: 'parado-diagonal-baixo',
+            frames: [{ key: 'sprite_jogador', frame: 12 }],
+            frameRate: 1,
+            repeat: -1,
+        })
+
+        this.anims.create({
+            key: 'parado-lado',
+            frames: [{ key: 'sprite_jogador', frame: 16 }],
+            frameRate: 1,
+            repeat: -1,
+        })
+
+        this.anims.create({
+            key: 'parado-diagonal-cima',
+            frames: [{ key: 'sprite_jogador', frame: 4 }],
+            frameRate: 1,
+            repeat: -1,
+        })
+
+        this.anims.create({
+            key: 'parado-cima',
+            frames: [{ key: 'sprite_jogador', frame: 24 }],
+            frameRate: 1,
+            repeat: -1,
+        })
+
+        this.player.anims.play('parado-frente')
+        
         // SISTEMA DE VIDAS DO PLAYER
         this.playerLife =
             new PlayerLifeSystem()
@@ -915,6 +1016,35 @@ export class GameScene
                 direction.y *
                 playerSpeed,
             )
+
+        // ATUALIZA ANIMAÇÃO DO JOGADOR CONFORME MOVIMENTO
+        if (direction.length() > 0) {
+            if (x !== 0 && y < 0) {
+                // W + A ou W + D → diagonal acima
+                this.ultimaDirecao = 'diagonal-cima'
+                this.player.setFlipX(x < 0)
+                this.player.anims.play('andar-diagonal-cima', true)
+            } else if (y < 0) {
+                // W puro → olha apenas para cima
+                this.ultimaDirecao = 'cima'
+                this.player.setFlipX(false)
+                this.player.anims.play('andar-cima', true)
+            } else if (x !== 0 && y > 0) {
+                this.ultimaDirecao = 'diagonal-baixo'
+                this.player.setFlipX(x < 0)
+                this.player.anims.play('andar-diagonal-baixo', true)
+            } else if (x !== 0) {
+                this.ultimaDirecao = 'lado'
+                this.player.setFlipX(x < 0)
+                this.player.anims.play('andar-lado', true)
+            } else if (y > 0) {
+                this.ultimaDirecao = 'frente'
+                this.player.setFlipX(false)
+                this.player.anims.play('andar-frente', true)
+            }
+        } else {
+            this.player.anims.play('parado-' + this.ultimaDirecao, true)
+        }
 
         // ATUALIZA IA DO PATÁGORAS
         this.patagorasAI.update()
