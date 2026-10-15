@@ -26,13 +26,16 @@ export class PuzzleTrigger {
     this.sprite = scene.add.image(x, y, TEXTURA).setDepth(4)
 
     this.dica = scene.add
-      .text(x, y - TAMANHO, '', {
-        fontSize: '12px',
-        color: '#ffffff',
-        backgroundColor: '#000000aa',
-        padding: { x: 4, y: 2 },
+      .text(x, y - TAMANHO / 2 - 2, '', {
+        fontFamily: '"Patrick Hand", Georgia, serif',
+        fontSize: '16px',
+        color: '#f4efe4',
+        backgroundColor: '#1a1208dd',
+        padding: { x: 6, y: 2 },
       })
       .setOrigin(0.5, 1)
+      .setScale(0.4)
+      .setResolution(3)
       .setDepth(12)
       .setVisible(false)
   }

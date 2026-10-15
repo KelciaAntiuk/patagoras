@@ -36,9 +36,9 @@ export const PUZZLES: Record<PuzzleId, PuzzleDefinicao> = {
     titulo: 'Refeitório',
     enunciado:
       'Calcule o número indicado pela pista deixada no refeitório.\n\n' +
-      'Há 36 bandejas para organizar igualmente em 6 mesas. Depois, acrescente ' +
-      '7 bandejas que chegaram por último. Quantas bandejas ficam em cada mesa ' +
-      'mais as 7 extras?',
+      'As 36 bandejas do refeitório foram divididas igualmente entre 6 mesas. ' +
+      'Depois, cada mesa recebeu mais 7 bandejas. ' +
+      'Com quantas bandejas cada mesa ficou?',
     slots: [{ resposta: 1 }, { resposta: 3 }],
   },
 
