@@ -1,6 +1,8 @@
 import Phaser from 'phaser'
 
 import { alternanciaLiberada } from '../ui/atalhos'
+import { InventoryUI } from '../ui/Inventory/InventoryUI'
+import { SLOT_SIZE } from '../ui/Inventory/InventorySlotUI'
 
 import {
     CollisionSystem,
@@ -20,12 +22,10 @@ import type {
 } from '../system/Collision/Pickup'
 
 import {
-    INVENTORY_EVENTS,
     ItemKind,
 } from '../system/Inventory/Inventory.types'
 
 import type {
-    InventorySlot,
     ItemDefinition,
 } from '../system/Inventory/Inventory.types'
 
@@ -90,7 +90,24 @@ import type {
     PuzzleFechamento,
 } from '../system/Puzzle/Puzzle.types'
 
-const PLAYER_SPEED = 120
+const PLAYER_SPEED = 80
+
+const ZOOM_CAMERA = 2.5
+const ESCALA_INVENTARIO_HUD = 0.7
+const FONTE_HUD = '"Patrick Hand", Georgia, serif'
+const CORACAO = [
+    '.oo.oo.',
+    'owroRro',
+    'orrrrro',
+    'orrrrro',
+    '.orrro.',
+    '..oro..',
+    '...o...',
+]
+const PIXEL_CORACAO = 3
+const RAIO_VISAO = 55
+const RAIO_ESCURIDAO = 100
+const TAMANHO_ESCURIDAO = 800
 
 const WORLD_WIDTH = 2400
 const WORLD_HEIGHT = 1800
@@ -341,6 +358,9 @@ export class GameScene
     private foodThrow!:
         FoodThrowSystem
 
+    private escuridao!:
+        Phaser.GameObjects.Image
+
     private playerLife!:
         PlayerLifeSystem
 
@@ -380,14 +400,21 @@ export class GameScene
     private debugKey!:
         Phaser.Input.Keyboard.Key
 
-    private inventoryText!:
+    private inventarioHud!:
+        InventoryUI
+
+    private controlesText!:
         Phaser.GameObjects.Text
+
+    private coracoes:
+        Phaser.GameObjects.Image[] = []
+
+    private tweenStatus?:
+        Phaser.Tweens.Tween
 
     private statusText!:
         Phaser.GameObjects.Text
 
-    private livesText!:
-        Phaser.GameObjects.Text
 
     private pickupRadiusDebug!:
         Phaser.GameObjects.Graphics
@@ -879,6 +906,10 @@ export class GameScene
 
         this.bindTestEvents()
 
+        this.criarEscuridao()
+
+        this.criarCameraHud()
+
         // LIMPEZA AO SAIR DA SCENE
         this.events.once(
             'shutdown',
@@ -1049,6 +1080,11 @@ export class GameScene
         // ATUALIZA IA DO PATÁGORAS
         this.patagorasAI.update()
 
+        this.escuridao.setPosition(
+            this.player.x,
+            this.player.y,
+        )
+
         // ATUALIZA QUAL ITEM ESTÁ
         // MAIS PRÓXIMO DO PLAYER
         this.collision.update()
@@ -1144,6 +1180,111 @@ export class GameScene
                 }
             }
         }
+    }
+
+    private criarEscuridao(): void {
+        if (!this.textures.exists('escuridao')) {
+            const textura =
+                this.textures.createCanvas(
+                    'escuridao',
+                    TAMANHO_ESCURIDAO,
+                    TAMANHO_ESCURIDAO,
+                )!
+            const ctx = textura.getContext()
+            const centro = TAMANHO_ESCURIDAO / 2
+            const gradiente =
+                ctx.createRadialGradient(
+                    centro,
+                    centro,
+                    RAIO_VISAO,
+                    centro,
+                    centro,
+                    RAIO_ESCURIDAO,
+                )
+            gradiente.addColorStop(0, 'rgba(0, 0, 0, 0)')
+            gradiente.addColorStop(1, 'rgba(0, 0, 0, 1)')
+            ctx.fillStyle = gradiente
+            ctx.fillRect(0, 0, TAMANHO_ESCURIDAO, TAMANHO_ESCURIDAO)
+            textura.refresh()
+        }
+
+        this.escuridao =
+            this.add
+                .image(
+                    this.player.x,
+                    this.player.y,
+                    'escuridao',
+                )
+                .setDepth(90000)
+    }
+
+    private criarCameraHud(): void {
+        const ehHud = (
+            objeto: Phaser.GameObjects.GameObject,
+        ): boolean =>
+            'scrollFactorX' in objeto &&
+            objeto.scrollFactorX === 0
+
+        const hud =
+            this.children.list
+                .filter(ehHud)
+
+        const cameraHud =
+            this.cameras.add(
+                0,
+                0,
+                this.scale.width,
+                this.scale.height,
+            )
+
+        cameraHud.ignore(
+            this.children.list
+                .filter((o) => !ehHud(o)),
+        )
+
+        this.cameras.main
+            .setZoom(ZOOM_CAMERA)
+            .ignore(hud)
+
+        const raiz = (
+            objeto: Phaser.GameObjects.GameObject,
+        ): Phaser.GameObjects.GameObject => {
+            let atual = objeto
+            while (atual.parentContainer) {
+                atual = atual.parentContainer
+            }
+            return atual
+        }
+
+        const aoAdicionar = (
+            objeto: Phaser.GameObjects.GameObject,
+        ): void => {
+            queueMicrotask(() => {
+                if (!objeto.scene) {
+                    return
+                }
+                if (ehHud(raiz(objeto))) {
+                    this.cameras.main.ignore(objeto)
+                } else {
+                    cameraHud.ignore(objeto)
+                }
+            })
+        }
+
+        this.events.on(
+            Phaser.Scenes.Events.ADDED_TO_SCENE,
+            aoAdicionar,
+        )
+
+        this.events.once(
+            'shutdown',
+            () => {
+                this.events.off(
+                    Phaser.Scenes.Events.ADDED_TO_SCENE,
+                    aoAdicionar,
+                )
+            },
+        )
     }
 
     private createTestTextures():
@@ -1358,8 +1499,7 @@ export class GameScene
 
         this.barreiras.delete(puzzleId)
 
-        this.statusText
-            .setText(
+        this.mostrarStatus(
                 def.aoAbrir,
             )
 
@@ -1459,109 +1599,114 @@ export class GameScene
 
     private createTestHud():
         void {
+        criarTexturasCoracao(this)
 
-        this.add
-            .text(
-                16,
-                16,
-
-                'WASD: mover | E: interagir | 1/2/3: soltar | Q: comida | ESC: menu | F3: debug',
-
-                {
-                    fontSize:
-                        '16px',
-
-                    color:
-                        '#ffffff',
-
-                    backgroundColor:
-                        '#000000aa',
-
-                    padding: {
-                        x: 8,
-                        y: 6,
+        this.controlesText =
+            this.add
+                .text(
+                    0,
+                    0,
+                    'WASD mover  ·  E interagir  ·  1/2/3 soltar  ·  Q comida  ·  ESC menu',
+                    {
+                        fontFamily: FONTE_HUD,
+                        fontSize: '13px',
+                        color: '#f4efe4',
+                        backgroundColor: '#1a1208aa',
+                        padding: { x: 8, y: 3 },
                     },
-                },
+                )
+                .setOrigin(1, 0)
+                .setAlpha(0.75)
+                .setResolution(2)
+                .setScrollFactor(0)
+                .setDepth(100000)
+
+        this.inventarioHud =
+            new InventoryUI(
+                this,
+                this.inventory,
+                0,
+                0,
             )
-            .setScrollFactor(0)
-            .setDepth(100000)
-
-        this.inventoryText =
-            this.add
-                .text(
-                    16,
-                    55,
-                    '',
-                    {
-                        fontSize:
-                            '16px',
-
-                        color:
-                            '#ffffff',
-
-                        backgroundColor:
-                            '#000000aa',
-
-                        padding: {
-                            x: 8,
-                            y: 6,
-                        },
-                    },
-                )
-                .setScrollFactor(0)
+                .setScale(ESCALA_INVENTARIO_HUD)
                 .setDepth(100000)
 
-        this.livesText =
-            this.add
-                .text(
-                    16,
-                    145,
-                    '',
-                    {
-                        fontSize:
-                            '16px',
+        this.inventory
+            .getSlots()
+            .forEach((_, indice, slots) => {
+                const larguraSlots =
+                    slots.length * SLOT_SIZE +
+                    (slots.length - 1) * 10
+                const xSlot =
+                    -larguraSlots / 2 +
+                    indice * (SLOT_SIZE + 10)
 
-                        color:
-                            '#ffffff',
-
-                        backgroundColor:
-                            '#000000aa',
-
-                        padding: {
-                            x: 8,
-                            y: 6,
-                        },
-                    },
+                this.inventarioHud.add(
+                    this.add
+                        .text(
+                            xSlot + 3,
+                            -SLOT_SIZE / 2,
+                            String(indice + 1),
+                            {
+                                fontFamily: FONTE_HUD,
+                                fontSize: '14px',
+                                color: '#d8b46a',
+                            },
+                        )
+                        .setResolution(2),
                 )
-                .setScrollFactor(0)
-                .setDepth(100000)
+            })
+
+        this.coracoes =
+            Array.from(
+                { length: this.playerLife.getMaxLives() },
+                () =>
+                    this.add
+                        .image(0, 0, 'coracao-cheio')
+                        .setOrigin(0, 1)
+                        .setScrollFactor(0)
+                        .setDepth(100000),
+            )
 
         this.statusText =
             this.add
                 .text(
-                    16,
-                    185,
-
-                    'Aproxime-se de um item.',
-
+                    0,
+                    0,
+                    '',
                     {
-                        fontSize:
-                            '16px',
-
-                        color:
-                            '#ffffff',
-
-                        backgroundColor:
-                            '#000000aa',
-
-                        padding: {
-                            x: 8,
-                            y: 6,
-                        },
+                        fontFamily: FONTE_HUD,
+                        fontSize: '17px',
+                        color: '#f4efe4',
+                        backgroundColor: '#1a1208dd',
+                        padding: { x: 12, y: 5 },
+                        align: 'center',
                     },
                 )
+                .setOrigin(0.5, 1)
+                .setResolution(2)
                 .setScrollFactor(0)
                 .setDepth(100000)
+                .setVisible(false)
+
+        this.posicionarHud()
+
+        this.scale.on(
+            Phaser.Scale.Events.RESIZE,
+            this.posicionarHud,
+            this,
+        )
+
+        this.events.once(
+            'shutdown',
+            () => {
+                this.scale.off(
+                    Phaser.Scale.Events.RESIZE,
+                    this.posicionarHud,
+                    this,
+                )
+            },
+        )
 
         this.pickupRadiusDebug =
             this.add
@@ -1569,34 +1714,14 @@ export class GameScene
                 .setDepth(99999)
                 .setVisible(false)
 
-        this.updateInventoryHud(
-            this.inventory
-                .getSlots(),
-        )
-
         this.updateLivesHud(
             this.playerLife
                 .getLives(),
-            this.playerLife
-                .getMaxLives(),
         )
     }
 
     private bindTestEvents():
         void {
-
-        this.inventory.on(
-            INVENTORY_EVENTS.CHANGED,
-
-            (
-                slots:
-                    readonly InventorySlot[],
-            ) => {
-                this.updateInventoryHud(
-                    slots,
-                )
-            },
-        )
 
         this.collision.on(
             COLLISION_EVENTS
@@ -1606,9 +1731,9 @@ export class GameScene
                 pickup:
                     Pickup,
             ) => {
-                this.statusText
-                    .setText(
+                this.mostrarStatus(
                         `[E] Coletar: ${pickup.item.name}`,
+                        true,
                     )
             },
         )
@@ -1618,9 +1743,8 @@ export class GameScene
                 .PICKUP_RANGE_LEFT,
 
             () => {
-                this.statusText
-                    .setText(
-                        'Aproxime-se de um item.',
+                this.mostrarStatus(
+                        '',
                     )
             },
         )
@@ -1633,8 +1757,7 @@ export class GameScene
                 pickup:
                     Pickup,
             ) => {
-                this.statusText
-                    .setText(
+                this.mostrarStatus(
                         `Coletado: ${pickup.item.name}`,
                     )
             },
@@ -1645,8 +1768,7 @@ export class GameScene
                 .PICKUP_BLOCKED,
 
             () => {
-                this.statusText
-                    .setText(
+                this.mostrarStatus(
                         'Inventário cheio.',
                     )
             },
@@ -1667,8 +1789,7 @@ export class GameScene
                     return
                 }
 
-                this.statusText
-                    .setText(
+                this.mostrarStatus(
                         'Puzzle resolvido!',
                     )
             },
@@ -1686,8 +1807,7 @@ export class GameScene
                     fechamento.motivo ===
                     PuzzleCloseReason.Atacado
                 ) {
-                    this.statusText
-                        .setText(
+                    this.mostrarStatus(
                             'O Patágoras te pegou! O puzzle foi fechado.',
                         )
                 }
@@ -1697,8 +1817,7 @@ export class GameScene
         this.foodThrow.on(
             FOOD_EVENTS.NO_FOOD,
             () => {
-                this.statusText
-                    .setText(
+                this.mostrarStatus(
                         'Você não possui comida.',
                     )
             },
@@ -1707,8 +1826,7 @@ export class GameScene
         this.foodThrow.on(
             FOOD_EVENTS.BUSY,
             () => {
-                this.statusText
-                    .setText(
+                this.mostrarStatus(
                         'A comida já está sendo arremessada.',
                     )
             },
@@ -1717,8 +1835,7 @@ export class GameScene
         this.foodThrow.on(
             FOOD_EVENTS.THROW_STARTED,
             () => {
-                this.statusText
-                    .setText(
+                this.mostrarStatus(
                         'Comida arremessada.',
                     )
             },
@@ -1727,8 +1844,7 @@ export class GameScene
         this.foodThrow.on(
             FOOD_EVENTS.LANDED,
             () => {
-                this.statusText
-                    .setText(
+                this.mostrarStatus(
                         'A comida caiu no chão.',
                     )
             },
@@ -1737,8 +1853,7 @@ export class GameScene
         this.foodThrow.on(
             FOOD_EVENTS.HIT_PATAGORAS,
             () => {
-                this.statusText
-                    .setText(
+                this.mostrarStatus(
                         'Patágoras comeu a comida e dormiu.',
                     )
             },
@@ -1748,16 +1863,13 @@ export class GameScene
             PLAYER_LIFE_EVENTS.CHANGED,
             (
                 lives: number,
-                maxLives: number,
             ) => {
                 this.updateLivesHud(
                     lives,
-                    maxLives,
                 )
 
                 if (lives > 0) {
-                    this.statusText
-                        .setText(
+                    this.mostrarStatus(
                             `Patágoras acertou você! Vidas restantes: ${lives}.`,
                         )
                 }
@@ -1776,8 +1888,7 @@ export class GameScene
                 this.patagoras
                     .stop()
 
-                this.statusText
-                    .setText(
+                this.mostrarStatus(
                         'GAME OVER',
                     )
 
@@ -1786,48 +1897,107 @@ export class GameScene
         )
     }
 
-    private updateInventoryHud(
-        slots:
-            readonly InventorySlot[],
-    ): void {
+    private areaVisivel():
+        Phaser.Geom.Rectangle {
+        const { width, height } =
+            this.scale.gameSize
+        const pai =
+            this.scale.parentSize
+        const escala =
+            pai.width > 0 && pai.height > 0
+                ? Math.max(
+                    pai.width / width,
+                    pai.height / height,
+                )
+                : 1
+        const largura =
+            Math.min(width, pai.width / escala || width)
+        const altura =
+            Math.min(height, pai.height / escala || height)
 
-        const lines =
-            slots.map(
-                (
-                    item,
-                    index,
-                ) => {
-                    return `${index + 1}. ${item?.name ?? 'vazio'}`
-                },
+        return new Phaser.Geom.Rectangle(
+            (width - largura) / 2,
+            (height - altura) / 2,
+            largura,
+            altura,
+        )
+    }
+
+    private posicionarHud(): void {
+        const area =
+            this.areaVisivel()
+        const margem = 14
+
+        this.controlesText.setPosition(
+            area.right - margem,
+            area.top + margem,
+        )
+
+        const larguraInventario =
+            this.inventarioHud.getBounds().width
+        const alturaInventario =
+            this.inventarioHud.getBounds().height
+
+        this.inventarioHud.setPosition(
+            area.left + margem + larguraInventario / 2,
+            area.bottom - margem - alturaInventario / 2,
+        )
+
+        const topoInventario =
+            area.bottom - margem - alturaInventario
+
+        this.coracoes.forEach((coracao, indice) => {
+            coracao.setPosition(
+                area.left + margem + 2 + indice * (coracao.width + 4),
+                topoInventario - 6,
             )
+        })
 
-        this.inventoryText
-            .setText([
-                'Inventário de teste:',
-                ...lines,
-            ])
+        this.statusText.setPosition(
+            area.centerX,
+            area.bottom - margem,
+        )
+    }
+
+    private mostrarStatus(
+        texto: string,
+        fixo = false,
+    ): void {
+        this.tweenStatus?.remove()
+        this.tweenStatus = undefined
+
+        this.statusText.setText(texto)
+        this.statusText
+            .setAlpha(1)
+            .setVisible(texto !== '')
+
+        if (fixo || texto === '') {
+            return
+        }
+
+        this.tweenStatus =
+            this.tweens.add({
+                targets: this.statusText,
+                alpha: 0,
+                delay: 2500,
+                duration: 600,
+                onComplete: () => {
+                    this.statusText.setVisible(false)
+                    this.tweenStatus = undefined
+                },
+            })
     }
 
     private updateLivesHud(
         lives: number,
-        maxLives: number,
     ): void {
-
-        const full =
-            '♥'.repeat(lives)
-
-        const empty =
-            '♡'.repeat(
-                Math.max(
-                    0,
-                    maxLives - lives,
-                ),
+        this.coracoes.forEach((coracao, indice) => {
+            coracao.setTexture(
+                indice < lives
+                    ? 'coracao-cheio'
+                    : 'coracao-vazio',
             )
-
-        this.livesText
-            .setText(
-                `Vidas: ${full}${empty}`,
-            )
+        })
     }
 
     private updatePickupRadiusDebug():
@@ -1857,4 +2027,42 @@ export class GameScene
             )
     }
 
+}
+
+function criarTexturasCoracao(
+    cena: Phaser.Scene,
+): void {
+    const variantes = [
+        { chave: 'coracao-cheio', cores: { o: '#2a0f0a', r: '#e2453a', R: '#e2453a', w: '#ffb3a8' } },
+        { chave: 'coracao-vazio', cores: { o: '#2a0f0a', r: '#4a3329', R: '#4a3329', w: '#4a3329' } },
+    ] as const
+
+    for (const { chave, cores } of variantes) {
+        if (cena.textures.exists(chave)) {
+            continue
+        }
+
+        const largura = CORACAO[0].length * PIXEL_CORACAO
+        const altura = CORACAO.length * PIXEL_CORACAO
+        const textura =
+            cena.textures.createCanvas(chave, largura, altura)!
+        const ctx = textura.getContext()
+
+        CORACAO.forEach((linha, y) => {
+            ;[...linha].forEach((pixel, x) => {
+                if (pixel === '.') {
+                    return
+                }
+                ctx.fillStyle = cores[pixel as keyof typeof cores]
+                ctx.fillRect(
+                    x * PIXEL_CORACAO,
+                    y * PIXEL_CORACAO,
+                    PIXEL_CORACAO,
+                    PIXEL_CORACAO,
+                )
+            })
+        })
+
+        textura.refresh()
+    }
 }
