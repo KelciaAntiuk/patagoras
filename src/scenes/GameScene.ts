@@ -419,8 +419,8 @@ export class GameScene
     private pickupRadiusDebug!:
         Phaser.GameObjects.Graphics
 
-    private layerParedesInvisiveis!:
-        Phaser.Tilemaps.TilemapLayer | null
+    private layersParedesInvisiveis:
+        Phaser.Tilemaps.TilemapLayer[] = []
 
     private hiddenTiles:
         Phaser.Tilemaps.Tile[] = []
@@ -463,6 +463,26 @@ export class GameScene
             'assets/tilesets/Dungeon_Tileset.png',
         )
 
+        this.load.image(
+            'mobilha',
+            'assets/tilesets/mobilha.png',
+        )
+
+        this.load.image(
+            'rundown-house',
+            'assets/tilesets/A rundown house.png',
+        )
+
+        this.load.image(
+            'mobilha2.2',
+            'assets/tilesets/mobilha2.2.png',
+        )
+
+        this.load.image(
+            'mobilha3',
+            'assets/tilesets/mobilha3.png',
+        )
+
         this.load.tilemapTiledJSON(
             'mapa-principal',
             'assets/maps/mapaPrincipal.json',
@@ -500,6 +520,8 @@ export class GameScene
     }
 
     create(dados?: { abrirMenu?: boolean }): void {
+        this.createTestTextures()
+
         const map =
             this.make.tilemap({
                 key: 'mapa-principal',
@@ -523,10 +545,45 @@ export class GameScene
                 'dungeon-tileset',
             )
 
+        const automapTileset =
+            map.addTilesetImage(
+                'automap-tiles',
+                'automap-tiles',
+            )
+
+        const mobilhaTileset =
+            map.addTilesetImage(
+                'mobilha',
+                'mobilha',
+            )
+
+        const rundownHouseTileset =
+            map.addTilesetImage(
+                'A rundown house',
+                'rundown-house',
+            )
+
+        const mobilha22Tileset =
+            map.addTilesetImage(
+                'mobilha2.2',
+                'mobilha2.2',
+            )
+
+        const mobilha3Tileset =
+            map.addTilesetImage(
+                'mobilha3',
+                'mobilha3',
+            )
+
         const rawTilesets = [
             oldHouseTileset,
             runSheetTileset,
             dungeonTileset,
+            automapTileset,
+            mobilhaTileset,
+            rundownHouseTileset,
+            mobilha22Tileset,
+            mobilha3Tileset,
         ]
         // Filter out nulls to prevent crashes
         const tilesets = rawTilesets.filter(ts => ts !== null) as Phaser.Tilemaps.Tileset[]
@@ -534,32 +591,70 @@ export class GameScene
         const mapOriginX = 100
         const mapOriginY = 100
 
-        const layerBruto = this.criarCamada(map, 'mapa bruto', tilesets, mapOriginX, mapOriginY)
-        layerBruto?.setDepth(0)
+        const refLayerData =
+            map.layers.find((l) => l.name === 'colisao') ??
+            map.layers[0]
+        const refX = refLayerData ? refLayerData.x : 0
+        const refY = refLayerData ? refLayerData.y : 0
 
-        const layerSolo = this.criarCamada(map, 'detalhes de solo', tilesets, mapOriginX, mapOriginY)
-        layerSolo?.setDepth(1)
+        this.layersParedesInvisiveis = []
+        const layersParedes: Phaser.Tilemaps.TilemapLayer[] = []
+        let layerColisao: Phaser.Tilemaps.TilemapLayer | null = null
 
-        const layerParedes = this.criarCamada(map, 'paredes', tilesets, mapOriginX, mapOriginY)
-        layerParedes?.setDepth(2)
+        for (const layerData of map.layers) {
+            if (layerData.width === 0 || layerData.height === 0) {
+                continue
+            }
 
-        const layerParedes2 = this.criarCamada(map, 'paredes 2', tilesets, mapOriginX, mapOriginY)
-        layerParedes2?.setDepth(3)
+            const nome = layerData.name
+            const nomeLower = nome.toLowerCase()
 
-        const layerParedesInvisiveis = this.criarCamada(map, 'paredes invisiveis', tilesets, mapOriginX, mapOriginY + 256)
-        layerParedesInvisiveis?.setVisible(true)
-        layerParedesInvisiveis?.setDepth(10) // Acima do personagem
+            if (nomeLower === 'colisao') {
+                const lx = mapOriginX + Math.round(layerData.x - refX)
+                const ly = mapOriginY + Math.round(layerData.y - refY)
+                layerColisao = this.criarCamada(map, nome, tilesets, lx, ly)
+                layerColisao?.setVisible(false)
+                continue
+            }
 
-        const layerProps = this.criarCamada(map, 'detalhes de Props', tilesets, mapOriginX, mapOriginY)
-        layerProps?.setDepth(11)
+            if (!layerData.visible || nomeLower.includes('esqueleto')) {
+                continue
+            }
 
-        // Camada de colisão personalizada desenhada no Tiled
-        const layerColisao = this.criarCamada(map, 'colisao', tilesets, mapOriginX, mapOriginY)
-        layerColisao?.setVisible(false)
+            const lx = mapOriginX + Math.round(layerData.x - refX)
+            const ly = mapOriginY + Math.round(layerData.y - refY)
+            const layer = this.criarCamada(map, nome, tilesets, lx, ly)
+            if (!layer) {
+                continue
+            }
 
-        this.layerParedesInvisiveis = layerParedesInvisiveis
+            layer.setVisible(true)
 
-        this.createTestTextures()
+            if (nomeLower.includes('mapa bruto')) {
+                layer.setDepth(0)
+            } else if (nomeLower.includes('detalhes de solo')) {
+                layer.setDepth(1)
+            } else if (nomeLower.includes('paredes 2')) {
+                layer.setDepth(3)
+                layersParedes.push(layer)
+            } else if (nomeLower.includes('paredes invisiveis')) {
+                layer.setDepth(10)
+                this.layersParedesInvisiveis.push(layer)
+            } else if (nomeLower.includes('paredes')) {
+                layer.setDepth(2)
+                layersParedes.push(layer)
+            } else if (nomeLower.includes('mobilha invisivel')) {
+                layer.setDepth(10)
+                this.layersParedesInvisiveis.push(layer)
+            } else if (nomeLower.includes('mobilha por cima da parede')) {
+                layer.setDepth(11)
+                this.layersParedesInvisiveis.push(layer)
+            } else if (nomeLower.includes('mobilha')) {
+                layer.setDepth(4)
+            } else if (nomeLower.includes('props')) {
+                layer.setDepth(11)
+            }
+        }
 
         // Criação do jogador
         this.player =
@@ -707,7 +802,7 @@ export class GameScene
         const wallRects =
             this.extractWallRects(
                 hasCustomCollision
-                    ? [layerColisao] : [layerParedes, layerParedes2],
+                    ? [layerColisao] : layersParedes,
             )
 
         this.collision
@@ -1156,7 +1251,7 @@ export class GameScene
 
         this.updatePickupRadiusDebug()
 
-        if (this.layerParedesInvisiveis) {
+        if (this.layersParedesInvisiveis.length > 0) {
             // Restaura as paredes que deixaram de cobrir o personagem
             for (const tile of this.hiddenTiles) {
                 tile.alpha = 1
@@ -1164,19 +1259,21 @@ export class GameScene
             this.hiddenTiles = []
 
             // Pega apenas os blocos de paredes invisíveis que estão sobre o personagem
-            const overlappingTiles =
-                this.layerParedesInvisiveis.getTilesWithinWorldXY(
-                    this.player.x - 6,
-                    this.player.y - 18,
-                    12,
-                    24,
-                    { isNotEmpty: true },
-                )
+            for (const layerInvisivel of this.layersParedesInvisiveis) {
+                const overlappingTiles =
+                    layerInvisivel.getTilesWithinWorldXY(
+                        this.player.x - 6,
+                        this.player.y - 18,
+                        12,
+                        24,
+                        { isNotEmpty: true },
+                    )
 
-            for (const tile of overlappingTiles) {
-                if (tile && tile.index > 0) {
-                    tile.alpha = 0 // Apenas esta parede do player fica invisível!
-                    this.hiddenTiles.push(tile)
+                for (const tile of overlappingTiles) {
+                    if (tile && tile.index > 0) {
+                        tile.alpha = 0 // Apenas esta parede do player fica invisível!
+                        this.hiddenTiles.push(tile)
+                    }
                 }
             }
         }
@@ -1289,6 +1386,13 @@ export class GameScene
 
     private createTestTextures():
         void {
+
+        this.createSolidTexture(
+            'automap-tiles',
+            80,
+            16,
+            0xff0000,
+        )
 
         this.createSolidTexture(
             'player',
