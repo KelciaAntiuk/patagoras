@@ -323,6 +323,36 @@ const ITENS_DOS_PUZZLES: readonly {
         y: 515,
         cor: 0x81ecec,
     },
+    {
+        item: {
+            id: 'sala2-numero-2',
+            name: 'Número 2',
+            description:
+                'Um dois recortado de uma cartolina de chamada.',
+            textureKey:
+                'item-sala2-2',
+            kind: ItemKind.Number,
+            value: 2,
+        },
+        x: 340,
+        y: 380,
+        cor: 0xfab1a0,
+    },
+    {
+        item: {
+            id: 'sala2-numero-4',
+            name: 'Número 4',
+            description:
+                'Um quatro recortado de uma cartolina de chamada.',
+            textureKey:
+                'item-sala2-4',
+            kind: ItemKind.Number,
+            value: 4,
+        },
+        x: 468,
+        y: 392,
+        cor: 0xfdcb6e,
+    },
 ]
 
 const TEST_ITEM_COLORS = [
@@ -888,6 +918,14 @@ export class GameScene
             )
 
         this.criarPortas()
+
+        // PUZZLE DENTRO DA SALA 2 (LIBERA A PORTA DA COZINHA)
+        this.puzzles
+            .adicionarGatilho(
+                420,
+                338,
+                'sala-aula-2',
+            )
         // SISTEMA DE COMIDA
         this.foodThrow =
             new FoodThrowSystem(

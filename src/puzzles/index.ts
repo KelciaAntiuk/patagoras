@@ -23,6 +23,7 @@ export const PUZZLES: Record<PuzzleId, PuzzleDefinicao> = {
   'entrada-cozinha': {
     tipo: 'slots',
     titulo: 'Porta da cozinha',
+    requisitos: ['sala-aula-2'],
     enunciado:
       'Charada riscada na madeira:\n' +
       '"Pegue o triplo de meia dúzia\n' +
@@ -66,9 +67,13 @@ export const PUZZLES: Record<PuzzleId, PuzzleDefinicao> = {
   'sala-aula-2': {
     tipo: 'slots',
     titulo: 'Sala de aula 2',
-    requisitos: ['sala-aula-1'],
-    enunciado: '3(x - 2) = 18',
-    slots: [{ rotulo: 'x =', resposta: 8 }],
+    enunciado:
+      'Lista de chamada na mesa do professor:\n' +
+      '"Trinta alunos estavam na sala,\n' +
+      'metade correu pro recreio lá fora.\n' +
+      'Nove voltaram pra pegar o lanche.\n' +
+      'Quantos estão na sala agora?"',
+    slots: [{ resposta: 2 }, { resposta: 4 }],
   },
 
   'biblioteca-pista': {
