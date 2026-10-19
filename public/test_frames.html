@@ -13,86 +13,58 @@
   </style>
 </head>
 <body>
-  <h1>Inspector de Frames: character-sheet.png</h1>
+  <h1>Inspector de Frames</h1>
+  <div style="margin-bottom:12px;">
+    <button onclick="carregar('/assets/sprites/character/character-sheet.png', 24, 24)">character-sheet.png (24x24)</button>
+    <button onclick="carregar('/assets/sprites/character/pato-sheet.png', 32, 32)">pato-sheet (32x32?)</button>
+    <button onclick="carregar('/assets/sprites/character/pato-sheet.png', 24, 24)">pato-sheet (24x24?)</button>
+    <button onclick="carregar('/assets/sprites/character/pato-sheet.png', 20, 18)">pato-sheet (20x18?)</button>
+    <button onclick="carregar('/assets/sprites/character/pato-sheet.png', 16, 16)">pato-sheet (16x16?)</button>
+  </div>
   <div id="info">Carregando...</div>
   <div class="grid" id="grid"></div>
 
   <script>
-    const img = new Image();
-    img.src = '/assets/sprites/character/character-sheet.png';
-    img.onload = () => {
-      const W = img.naturalWidth;
-      const H = img.naturalHeight;
-      const frameW = 24;
-      const frameH = 24;
-      const cols = Math.floor(W / frameW);
-      const rows = Math.floor(H / frameH);
-      const total = cols * rows;
+    function carregar(src, frameW, frameH) {
+      const img = new Image();
+      img.src = src;
+      img.onload = () => {
+        const W = img.naturalWidth;
+        const H = img.naturalHeight;
+        const cols = Math.floor(W / frameW);
+        const rows = Math.floor(H / frameH);
+        const total = cols * rows;
 
-      document.getElementById('info').innerHTML = `
-        <p>Imagem: <b>${W}x${H}px</b> | Colunas: <b>${cols}</b> | Linhas: <b>${rows}</b> | Total de frames: <b>${total}</b></p>
-      `;
+        document.getElementById('info').innerHTML = `
+          <p>Imagem: <b>${src}</b> (${W}x${H}px) | Frame: <b>${frameW}x${frameH}px</b> | Colunas: <b>${cols}</b> (resto ${W % frameW}px) | Linhas: <b>${rows}</b> (resto ${H % frameH}px) | Total: <b>${total}</b></p>
+        `;
 
-      const grid = document.getElementById('grid');
-      for (let i = 0; i < total; i++) {
-        const col = i % cols;
-        const row = Math.floor(i / cols);
+        const grid = document.getElementById('grid');
+        grid.innerHTML = '';
+        for (let i = 0; i < total; i++) {
+          const col = i % cols;
+          const row = Math.floor(i / cols);
 
-        const box = document.createElement('div');
-        box.className = 'frame-box';
+          const box = document.createElement('div');
+          box.className = 'frame-box';
 
-        const canvas = document.createElement('canvas');
-        canvas.width = frameW;
-        canvas.height = frameH;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, col * frameW, row * frameH, frameW, frameH, 0, 0, frameW, frameH);
+          const canvas = document.createElement('canvas');
+          canvas.width = frameW;
+          canvas.height = frameH;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, col * frameW, row * frameH, frameW, frameH, 0, 0, frameW, frameH);
 
-        const label = document.createElement('div');
-        label.className = 'label';
-        label.innerText = `Frame ${i}`;
+          const label = document.createElement('div');
+          label.className = 'label';
+          label.innerText = `Frame ${i}`;
 
-        box.appendChild(canvas);
-        box.appendChild(label);
-        grid.appendChild(box);
-      }
-
-      // Adiciona painel de teste de animação
-      const animDiv = document.createElement('div');
-      animDiv.style.cssText = 'background:#222;padding:16px;border-radius:8px;margin-top:20px;';
-      animDiv.innerHTML = `
-        <h2>Testar Animação</h2>
-        <label>Frames (separados por vírgula): </label>
-        <input id="framesInput" value="14,15,16,17" style="padding:4px;width:150px;" />
-        <label> FPS: </label>
-        <input id="fpsInput" type="number" value="8" style="padding:4px;width:60px;" />
-        <button id="btnPlay" style="padding:4px 12px;margin-left:8px;">Atualizar</button>
-        <div style="margin-top:16px;">
-          <canvas id="animCanvas" width="24" height="24" style="image-rendering:pixelated;width:96px;height:96px;background:#333;"></canvas>
-        </div>
-      `;
-      document.body.appendChild(animDiv);
-
-      let animInterval;
-      function startAnim() {
-        if (animInterval) clearInterval(animInterval);
-        const frames = document.getElementById('framesInput').value.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
-        const fps = parseInt(document.getElementById('fpsInput').value) || 8;
-        const aCanvas = document.getElementById('animCanvas');
-        const aCtx = aCanvas.getContext('2d');
-        let idx = 0;
-        animInterval = setInterval(() => {
-          if (frames.length === 0) return;
-          const f = frames[idx % frames.length];
-          const c = f % cols;
-          const r = Math.floor(f / cols);
-          aCtx.clearRect(0, 0, frameW, frameH);
-          aCtx.drawImage(img, c * frameW, r * frameH, frameW, frameH, 0, 0, frameW, frameH);
-          idx++;
-        }, 1000 / fps);
-      }
-      document.getElementById('btnPlay').onclick = startAnim;
-      startAnim();
-    };
+          box.appendChild(canvas);
+          box.appendChild(label);
+          grid.appendChild(box);
+        }
+      };
+    }
+    carregar('/assets/sprites/character/pato-sheet.png', 20, 18);
   </script>
 </body>
 </html>

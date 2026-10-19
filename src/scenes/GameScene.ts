@@ -92,7 +92,7 @@ import type {
 
 const PLAYER_SPEED = 80
 
-const ZOOM_CAMERA = 2.5
+const ZOOM_CAMERA = 2
 const ESCALA_INVENTARIO_HUD = 0.7
 const FONTE_HUD = '"Patrick Hand", Georgia, serif'
 const CORACAO = [
@@ -530,6 +530,12 @@ export class GameScene
             'assets/sprites/character/pato-sheet.png',
             { frameWidth: 20, frameHeight: 18 }
         )
+
+        // Carregamento individual das sprites do Patágoras
+        for (let i = 3; i <= 20; i++) {
+            const pad = String(i).padStart(4, '0')
+            this.load.image(`pato-${pad}`, `assets/sprites/character/Sprite-${pad}.png`)
+        }
     }
 
     private criarCamada(
@@ -775,6 +781,60 @@ export class GameScene
         })
 
         this.player.anims.play('parado-frente')
+
+        // Animação do Patágoras para baixo (S) - sprites 0003, 0004, 0005 e 0006
+        this.anims.create({
+            key: 'pato-andar-baixo',
+            frames: [
+                { key: 'pato-0003' },
+                { key: 'pato-0004' },
+                { key: 'pato-0005' },
+                { key: 'pato-0006' },
+            ],
+            frameRate: 8,
+            repeat: -1,
+        })
+
+        // Animação do Patágoras para cima (W) - sprites 0007 até 0012
+        this.anims.create({
+            key: 'pato-andar-cima',
+            frames: [
+                { key: 'pato-0007' },
+                { key: 'pato-0008' },
+                { key: 'pato-0009' },
+                { key: 'pato-0010' },
+                { key: 'pato-0011' },
+                { key: 'pato-0012' },
+            ],
+            frameRate: 8,
+            repeat: -1,
+        })
+
+        // Animação do Patágoras para os lados (A / D) - sprites 0013 até 0018
+        this.anims.create({
+            key: 'pato-andar-lado',
+            frames: [
+                { key: 'pato-0013' },
+                { key: 'pato-0014' },
+                { key: 'pato-0015' },
+                { key: 'pato-0016' },
+                { key: 'pato-0017' },
+                { key: 'pato-0018' },
+            ],
+            frameRate: 8,
+            repeat: -1,
+        })
+
+        // Animação do Patágoras na diagonal abaixo (S + A / S + D) - sprites 0019 e 0020
+        this.anims.create({
+            key: 'pato-andar-diagonal-baixo',
+            frames: [
+                { key: 'pato-0019' },
+                { key: 'pato-0020' },
+            ],
+            frameRate: 6,
+            repeat: -1,
+        })
         
         // SISTEMA DE VIDAS DO PLAYER
         this.playerLife =
@@ -1212,6 +1272,7 @@ export class GameScene
 
         // ATUALIZA IA DO PATÁGORAS
         this.patagorasAI.update()
+        this.patagoras.updateAnimation()
 
         this.escuridao.setPosition(
             this.player.x,
