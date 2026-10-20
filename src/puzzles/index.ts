@@ -79,7 +79,7 @@ export const PUZZLES: Record<PuzzleId, PuzzleDefinicao> = {
   'biblioteca-pista': {
     tipo: 'nota',
     titulo: 'Anotação da biblioteca',
-    requisitos: ['sala-aula-1'],
+    requisitos: ['cozinha'],
     texto: 'Os números das páginas marcadas são 3, 8 e 1. Use-os na ordem em que foram encontrados para formar o código do armário.',
   },
 

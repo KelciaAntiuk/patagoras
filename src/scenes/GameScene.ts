@@ -170,7 +170,7 @@ const PORTAS: readonly PuzzleDoorDefinition[] = [
         y: 412,
         largura: 32,
         altura: 20,
-        condicao: { tipo: 'puzzle', puzzleId: 'sala-aula-1' },
+        condicao: { tipo: 'puzzle', puzzleId: 'cozinha' },
         mensagemAbrir: 'A biblioteca foi destrancada.',
     },
 ]
@@ -381,6 +381,21 @@ const ITENS_DOS_PUZZLES: readonly {
         x: 468,
         y: 392,
         cor: 0xfdcb6e,
+    },
+    {
+        item: {
+            id: 'cozinha-numero-17',
+            name: 'Número 17',
+            description:
+                'Um 17 gravado no fundo de uma panela.',
+            textureKey:
+                'item-cozinha-17',
+            kind: ItemKind.Number,
+            value: 17,
+        },
+        x: 230,
+        y: 490,
+        cor: 0xe67e22,
     },
 ]
 
@@ -1029,6 +1044,14 @@ export class GameScene
                 420,
                 338,
                 'sala-aula-2',
+            )
+
+        // PUZZLE DENTRO DA COZINHA (LIBERA A BIBLIOTECA)
+        this.puzzles
+            .adicionarGatilho(
+                210,
+                482,
+                'cozinha',
             )
         // SISTEMA DE COMIDA
         this.foodThrow =
