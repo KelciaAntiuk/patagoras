@@ -1017,14 +1017,6 @@ export class GameScene
 
         this.criarPortas()
 
-        // PUZZLE DA SALA 1 (NA FRENTE DA PORTA, DESTRANCA A SALA 1
-        // E A PORTA/PUZZLES DA BIBLIOTECA)
-        this.puzzles
-            .adicionarGatilho(
-                276,
-                440,
-                'sala-aula-1',
-            )
 
         // PUZZLE DENTRO DA SALA 2 (LIBERA A PORTA DA COZINHA)
         this.puzzles
