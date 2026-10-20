@@ -84,6 +84,7 @@ import type {
 import {
     PUZZLE_EVENTS,
     PuzzleCloseReason,
+    PuzzleEstado,
 } from '../system/Puzzle/Puzzle.types'
 
 import type {
@@ -162,9 +163,11 @@ const PORTAS: readonly PuzzleDoorDefinition[] = [
         largura: 32,
         altura: 20,
         condicao: { tipo: 'puzzle', puzzleId: 'sala-aula-1' },
-        mensagemAbrir: 'A sala de aula 1 foi destrancada.',
+        mensagemAbrir: 'A sala de aula 1 foi destrancada! O armário da biblioteca agora pode ser aberto.',
     },
     ]
+
+const PORTA_BIBLIOTECA_ID = 'porta-biblioteca'
 
 const TEST_ITEMS:
     readonly ItemDefinition[] = [
@@ -1029,6 +1032,15 @@ export class GameScene
 
         this.criarPortas()
 
+        // PUZZLE DA SALA 1 (NA FRENTE DA PORTA, DESTRANCA A SALA 1
+        // E LIBERA O ARMÁRIO DA BIBLIOTECA)
+        this.puzzles
+            .adicionarGatilho(
+                276,
+                440,
+                'sala-aula-1',
+            )
+
         // PUZZLE DENTRO DA SALA 2 (LIBERA A PORTA DA COZINHA)
         this.puzzles
             .adicionarGatilho(
@@ -1720,6 +1732,27 @@ export class GameScene
                     )
             },
         )
+
+        // PORTA DA BIBLIOTECA: só destranca depois do puzzle da cozinha.
+        // Usa callback (e não puzzleId) para que a porta não abra o
+        // puzzle da cozinha remotamente.
+        this.doorSystem
+            .adicionarPorta({
+                id: PORTA_BIBLIOTECA_ID,
+                x: 564,
+                y: 412,
+                largura: 32,
+                altura: 20,
+                condicao: {
+                    tipo: 'callback',
+                    fn: () =>
+                        this.puzzles
+                            .estado('cozinha') ===
+                        PuzzleEstado.Resolvido,
+                },
+                mensagemTrancada: 'Biblioteca trancada',
+                mensagemAbrir: 'A biblioteca foi destrancada.',
+            })
     }
 
     private abrirPorta(
@@ -2033,6 +2066,23 @@ export class GameScene
                         puzzleId,
                     )
                 ) {
+                    return
+                }
+
+                if (puzzleId === 'cozinha') {
+                    const portaBiblioteca =
+                        this.doorSystem
+                            .getPorta(
+                                PORTA_BIBLIOTECA_ID,
+                            )
+
+                    if (portaBiblioteca?.isLocked) {
+                        portaBiblioteca.unlock()
+                    }
+
+                    this.mostrarStatus(
+                        'Cozinha resolvida! A porta da biblioteca foi destrancada.',
+                    )
                     return
                 }
 

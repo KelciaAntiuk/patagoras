@@ -86,7 +86,7 @@ export const PUZZLES: Record<PuzzleId, PuzzleDefinicao> = {
   'biblioteca-senha': {
     tipo: 'slots',
     titulo: 'Armário da biblioteca',
-    requisitos: ['biblioteca-pista'],
+    requisitos: ['biblioteca-pista', 'sala-aula-1'],
     enunciado: 'Coloque o código das páginas marcadas.',
     slots: [
       { rotulo: '1º:', resposta: 3 },
