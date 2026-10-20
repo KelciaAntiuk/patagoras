@@ -23,6 +23,7 @@ const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   parent: 'game',
   backgroundColor: '#131c24',
+  pixelArt: true,
   roundPixels: true,
   scale: {
 

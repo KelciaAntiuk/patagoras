@@ -23,6 +23,7 @@ export const PUZZLES: Record<PuzzleId, PuzzleDefinicao> = {
   'entrada-cozinha': {
     tipo: 'slots',
     titulo: 'Porta da cozinha',
+    requisitos: ['sala-aula-2'],
     enunciado:
       'Charada riscada na madeira:\n' +
       '"Pegue o triplo de meia dúzia\n' +
@@ -36,9 +37,9 @@ export const PUZZLES: Record<PuzzleId, PuzzleDefinicao> = {
     titulo: 'Refeitório',
     enunciado:
       'Calcule o número indicado pela pista deixada no refeitório.\n\n' +
-      'Há 36 bandejas para organizar igualmente em 6 mesas. Depois, acrescente ' +
-      '7 bandejas que chegaram por último. Quantas bandejas ficam em cada mesa ' +
-      'mais as 7 extras?',
+      'As 36 bandejas do refeitório foram divididas igualmente entre 6 mesas. ' +
+      'Depois, cada mesa recebeu mais 7 bandejas. ' +
+      'Com quantas bandejas cada mesa ficou?',
     slots: [{ resposta: 1 }, { resposta: 3 }],
   },
 
@@ -66,9 +67,13 @@ export const PUZZLES: Record<PuzzleId, PuzzleDefinicao> = {
   'sala-aula-2': {
     tipo: 'slots',
     titulo: 'Sala de aula 2',
-    requisitos: ['sala-aula-1'],
-    enunciado: '3(x - 2) = 18',
-    slots: [{ rotulo: 'x =', resposta: 8 }],
+    enunciado:
+      'Lista de chamada na mesa do professor:\n' +
+      '"Trinta alunos estavam na sala,\n' +
+      'metade correu pro recreio lá fora.\n' +
+      'Nove voltaram pra pegar o lanche.\n' +
+      'Quantos estão na sala agora?"',
+    slots: [{ resposta: 2 }, { resposta: 4 }],
   },
 
   'biblioteca-pista': {

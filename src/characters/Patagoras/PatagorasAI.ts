@@ -665,7 +665,15 @@ export class PatagorasAI {
 
             if (!nextWaypoint) {
 
-                this.patagoras.stop()
+                if (dynamicTarget) {
+                    this.patagoras.moveTowards(
+                        targetX,
+                        targetY,
+                        speed,
+                    )
+                } else {
+                    this.patagoras.stop()
+                }
 
                 return true
             }

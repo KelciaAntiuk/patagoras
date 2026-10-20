@@ -1,6 +1,6 @@
 export const PATAGORAS_CONFIG = {
-    speed: 120,
-    chaseSpeed: 150,
+    speed: 45,
+    chaseSpeed: 60,
     detectionRadius: 200,
     loseTargetRadius: 350,
     searchDurationMs: 5000,
