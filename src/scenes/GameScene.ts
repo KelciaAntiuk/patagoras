@@ -164,16 +164,7 @@ const PORTAS: readonly PuzzleDoorDefinition[] = [
         condicao: { tipo: 'puzzle', puzzleId: 'sala-aula-1' },
         mensagemAbrir: 'A sala de aula 1 foi destrancada.',
     },
-    {
-        id: 'porta-biblioteca',
-        x: 196,
-        y: 412,
-        largura: 32,
-        altura: 20,
-        condicao: { tipo: 'puzzle', puzzleId: 'cozinha' },
-        mensagemAbrir: 'A biblioteca foi destrancada.',
-    },
-]
+    ]
 
 const TEST_ITEMS:
     readonly ItemDefinition[] = [
@@ -258,8 +249,8 @@ const ITENS_DOS_PUZZLES: readonly {
             kind: ItemKind.Number,
             value: 3,
         },
-        x: 170,
-        y: 440,
+        x: 516,
+        y: 324,
         cor: 0xff7675,
     },
     {
@@ -273,8 +264,8 @@ const ITENS_DOS_PUZZLES: readonly {
             kind: ItemKind.Number,
             value: 8,
         },
-        x: 230,
-        y: 450,
+        x: 596,
+        y: 324,
         cor: 0x74b9ff,
     },
     {
@@ -288,8 +279,8 @@ const ITENS_DOS_PUZZLES: readonly {
             kind: ItemKind.Number,
             value: 1,
         },
-        x: 320,
-        y: 440,
+        x: 596,
+        y: 372,
         cor: 0xffeaa7,
     },
     {
@@ -1017,21 +1008,21 @@ export class GameScene
         // GATILHOS DA BIBLIOTECA
         this.puzzles
             .adicionarGatilho(
-                220,
-                380,
+                548,
+                356,
                 'biblioteca-pista',
             )
 
         this.puzzles
             .adicionarGatilho(
-                170,
-                380,
+                644,
+                356,
                 'biblioteca-senha',
             )
 
         this.puzzles
             .adicionarGatilho(
-                170,
+                692,
                 340,
                 'diretor',
             )
@@ -2048,6 +2039,13 @@ export class GameScene
                 if (puzzleId === 'biblioteca-pista') {
                     this.mostrarStatus(
                         'Pista anotada! Páginas marcadas: 3, 8 e 1. Use o código no armário.',
+                    )
+                    return
+                }
+
+                if (puzzleId === 'diretor') {
+                    this.mostrarStatus(
+                        'Documento lido: Você descobriu os acontecimentos do incidente!',
                     )
                     return
                 }
