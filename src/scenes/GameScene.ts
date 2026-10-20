@@ -90,6 +90,22 @@ import type {
     PuzzleFechamento,
 } from '../system/Puzzle/Puzzle.types'
 
+import {
+    PuzzleDoorSystem,
+} from '../system/Door/PuzzleDoorSystem'
+
+import {
+    DOOR_EVENTS,
+} from '../system/Door/PuzzleDoor.types'
+
+import type {
+    PuzzleDoorDefinition,
+} from '../system/Door/PuzzleDoor.types'
+
+import type {
+    PuzzleDoor,
+} from '../system/Door/PuzzleDoor'
+
 const PLAYER_SPEED = 80
 
 const ZOOM_CAMERA = 2
@@ -120,29 +136,33 @@ const SPAWN_JOGADOR_Y = 600
 const PUZZLE_TESTE_X = 480
 const PUZZLE_TESTE_Y = 660
 
-const PORTAS: readonly {
-    readonly puzzleId: PuzzleId
-    readonly porta: { x: number; y: number; l: number; a: number }
-    readonly gatilho: { x: number; y: number }
-    readonly aoAbrir: string
-}[] = [
+const PORTAS: readonly PuzzleDoorDefinition[] = [
     {
-        puzzleId: 'refeitorio',
-        porta: { x: 475, y: 565, l: 40, a: 42 },
-        gatilho: { x: 475, y: 596 },
-        aoAbrir: 'O refeitório foi destrancado.',
+        id: 'porta-refeitorio',
+        x: 475,
+        y: 565,
+        largura: 40,
+        altura: 42,
+        condicao: { tipo: 'puzzle', puzzleId: 'refeitorio' },
+        mensagemAbrir: 'O refeitório foi destrancado.',
     },
     {
-        puzzleId: 'entrada-cozinha',
-        porta: { x: 255, y: 482, l: 16, a: 30 },
-        gatilho: { x: 272, y: 482 },
-        aoAbrir: 'A cozinha foi destrancada.',
+        id: 'porta-cozinha',
+        x: 255,
+        y: 482,
+        largura: 16,
+        altura: 30,
+        condicao: { tipo: 'puzzle', puzzleId: 'entrada-cozinha' },
+        mensagemAbrir: 'A cozinha foi destrancada.',
     },
     {
-        puzzleId: 'sala-aula-1',
-        porta: { x: 276, y: 412, l: 32, a: 20 },
-        gatilho: { x: 276, y: 440 },
-        aoAbrir: 'A sala de aula 1 foi destrancada.',
+        id: 'porta-sala-aula-1',
+        x: 276,
+        y: 412,
+        largura: 32,
+        altura: 20,
+        condicao: { tipo: 'puzzle', puzzleId: 'sala-aula-1' },
+        mensagemAbrir: 'A sala de aula 1 foi destrancada.',
     },
 ]
 
@@ -400,6 +420,9 @@ export class GameScene
     private puzzles!:
         PuzzleSystem
 
+    private doorSystem!:
+        PuzzleDoorSystem
+
     private cursors!:
         Phaser.Types.Input.Keyboard.CursorKeys
 
@@ -463,16 +486,6 @@ export class GameScene
         | 'lado'
         | 'diagonal-cima'
         | 'cima' = 'frente'
-
-    private readonly barreiras =
-        new Map<
-            PuzzleId,
-            {
-                porta: Phaser.GameObjects.Rectangle
-                colisor: Phaser.Physics.Arcade.Collider
-            }
-        >()
-
     constructor() {
         super('GameScene')
     }
@@ -1107,6 +1120,9 @@ export class GameScene
         this.events.once(
             'shutdown',
             () => {
+                this.doorSystem
+                    .destroy()
+
                 this.puzzles
                     .destroy()
 
@@ -1285,7 +1301,9 @@ export class GameScene
 
         this.puzzles.update()
 
-        // E = COLETA ITEM OU ABRE PUZZLE
+        this.doorSystem.update()
+
+        // E = INTERAÇÃO (PORTA -> GATILHO PUZZLE -> COLETA ITEM)
         if (
             Phaser.Input.Keyboard
                 .JustDown(
@@ -1294,15 +1312,20 @@ export class GameScene
             !puzzleAberto
         ) {
             if (
-                !this.puzzles
+                !this.doorSystem
                     .interagir()
             ) {
                 if (
-                    this.collision.pickups
-                        .getFocused()
+                    !this.puzzles
+                        .interagir()
                 ) {
-                    this.collision
-                        .tryCollect()
+                    if (
+                        this.collision.pickups
+                            .getFocused()
+                    ) {
+                        this.collision
+                            .tryCollect()
+                    }
                 }
             }
         }
@@ -1634,49 +1657,26 @@ export class GameScene
     private criarPortas():
         void {
 
-        this.barreiras.clear()
+        this.doorSystem =
+            new PuzzleDoorSystem(
+                this,
+                {
+                    jogador:
+                        this.player,
+                    inventario:
+                        this.inventory,
+                    puzzles:
+                        this.puzzles,
+                    raioInteracao: 45,
+                },
+            )
 
         PORTAS.forEach(
             (def) => {
-                this.puzzles
-                    .adicionarGatilho(
-                        def.gatilho.x,
-                        def.gatilho.y,
-                        def.puzzleId,
+                this.doorSystem
+                    .adicionarPorta(
+                        def,
                     )
-
-                const porta = this.add
-                    .rectangle(
-                        def.porta.x,
-                        def.porta.y,
-                        def.porta.l,
-                        def.porta.a,
-                        0x6b4526,
-                    )
-
-                porta.setStrokeStyle(
-                    2,
-                    0x2f1d0e,
-                )
-
-                porta.setDepth(5)
-
-                this.physics.add.existing(
-                    porta,
-                    true,
-                )
-
-                this.barreiras.set(
-                    def.puzzleId,
-                    {
-                        porta,
-                        colisor:
-                            this.physics.add.collider(
-                                this.player,
-                                porta,
-                            ),
-                    },
-                )
             },
         )
     }
@@ -1685,26 +1685,29 @@ export class GameScene
         puzzleId: PuzzleId,
     ): boolean {
 
-        const barreira =
-            this.barreiras.get(puzzleId)
-
-        const def =
-            PORTAS.find(
-                (p) =>
-                    p.puzzleId ===
+        const porta =
+            this.doorSystem
+                .getPortaPorPuzzle(
                     puzzleId,
+                )
+
+        if (!porta) return false
+
+        if (porta.isLocked) {
+            porta.unlock()
+        } else if (!porta.isOpen) {
+            porta.openDoor()
+        }
+
+        if (
+            porta.def
+                .mensagemAbrir
+        ) {
+            this.mostrarStatus(
+                porta.def
+                    .mensagemAbrir,
             )
-
-        if (!barreira || !def) return false
-
-        barreira.colisor.destroy()
-        barreira.porta.destroy()
-
-        this.barreiras.delete(puzzleId)
-
-        this.mostrarStatus(
-                def.aoAbrir,
-            )
+        }
 
         return true
     }
@@ -1994,6 +1997,21 @@ export class GameScene
 
                 this.mostrarStatus(
                         'Puzzle resolvido!',
+                    )
+            },
+        )
+
+        this.doorSystem.on(
+            DOOR_EVENTS
+                .LOCKED_FEEDBACK,
+
+            (
+                porta: PuzzleDoor,
+            ) => {
+                this.mostrarStatus(
+                        porta.def
+                            .mensagemTrancada ??
+                            'A porta está trancada.',
                     )
             },
         )
