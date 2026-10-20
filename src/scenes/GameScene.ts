@@ -154,7 +154,7 @@ const TEST_ITEMS:
             description:
                 'Uma chave velha encontrada no chão.',
             textureKey:
-                'test-item-key',
+                'sprite-chave',
             kind:
                 ItemKind.Generic,
         },
@@ -164,7 +164,7 @@ const TEST_ITEMS:
             description:
                 'Um bilhete com anotações incompletas.',
             textureKey:
-                'test-item-note',
+                'sprite-papel',
             kind:
                 ItemKind.Generic,
         },
@@ -174,7 +174,7 @@ const TEST_ITEMS:
             description:
                 'Talvez ainda tenha alguma carga.',
             textureKey:
-                'test-item-battery',
+                'sprite-pilha',
             kind:
                 ItemKind.Generic,
         },
@@ -184,7 +184,7 @@ const TEST_ITEMS:
             description:
                 'Uma lata fechada encontrada no internato.',
             textureKey:
-                'test-item-food',
+                'sprite-comida',
             kind:
                 ItemKind.Food,
         },
@@ -194,7 +194,7 @@ const TEST_ITEMS:
             description:
                 'Um seis de metal, arrancado de alguma porta.',
             textureKey:
-                'test-item-six',
+                'sprite-numero-6',
             kind:
                 ItemKind.Number,
             value: 6,
@@ -205,7 +205,7 @@ const TEST_ITEMS:
             description:
                 'Um número que pode ser útil em algum puzzle.',
             textureKey:
-                'test-item-number',
+                'sprite-numero-7',
             kind:
                 ItemKind.Number,
             value: 7,
@@ -225,7 +225,7 @@ const ITENS_DOS_PUZZLES: readonly {
             description:
                 'Um três de metal. Parece ter saído de uma porta de armário.',
             textureKey:
-                'item-numero-3',
+                'sprite-numero-3',
             kind: ItemKind.Number,
             value: 3,
         },
@@ -240,7 +240,7 @@ const ITENS_DOS_PUZZLES: readonly {
             description:
                 'Um oito de metal, caído perto da entrada.',
             textureKey:
-                'item-numero-8',
+                'sprite-numero-8',
             kind: ItemKind.Number,
             value: 8,
         },
@@ -255,7 +255,7 @@ const ITENS_DOS_PUZZLES: readonly {
             description:
                 'Um um de metal, esquecido entre as mesas.',
             textureKey:
-                'item-numero-1',
+                'sprite-numero-1',
             kind: ItemKind.Number,
             value: 1,
         },
@@ -270,7 +270,7 @@ const ITENS_DOS_PUZZLES: readonly {
             description:
                 'Um um rabiscado numa bandeja.',
             textureKey:
-                'item-refeitorio-1',
+                'sprite-numero-1',
             kind: ItemKind.Number,
             value: 1,
         },
@@ -285,7 +285,7 @@ const ITENS_DOS_PUZZLES: readonly {
             description:
                 'Um três rabiscado numa bandeja.',
             textureKey:
-                'item-refeitorio-3',
+                'sprite-numero-3',
             kind: ItemKind.Number,
             value: 3,
         },
@@ -300,7 +300,7 @@ const ITENS_DOS_PUZZLES: readonly {
             description:
                 'Um um de giz, desenhado num caco de lousa.',
             textureKey:
-                'item-sala1-1',
+                'sprite-numero-1',
             kind: ItemKind.Number,
             value: 1,
         },
@@ -315,7 +315,7 @@ const ITENS_DOS_PUZZLES: readonly {
             description:
                 'Um nove de giz, desenhado num caco de lousa.',
             textureKey:
-                'item-sala1-9',
+                'sprite-numero-9',
             kind: ItemKind.Number,
             value: 9,
         },
@@ -330,7 +330,7 @@ const ITENS_DOS_PUZZLES: readonly {
             description:
                 'Um dois recortado de uma cartolina de chamada.',
             textureKey:
-                'item-sala2-2',
+                'sprite-numero-2',
             kind: ItemKind.Number,
             value: 2,
         },
@@ -345,7 +345,7 @@ const ITENS_DOS_PUZZLES: readonly {
             description:
                 'Um quatro recortado de uma cartolina de chamada.',
             textureKey:
-                'item-sala2-4',
+                'sprite-numero-4',
             kind: ItemKind.Number,
             value: 4,
         },
@@ -536,6 +536,19 @@ export class GameScene
             const pad = String(i).padStart(4, '0')
             this.load.image(`pato-${pad}`, `assets/sprites/character/Sprite-${pad}.png`)
         }
+
+        // Sprites de números dos puzzles e itens
+        for (let i = 0; i <= 9; i++) {
+            let filename = `Number ${i}.png`
+            if (i === 1) filename = 'Number 1 (2).png'
+            if (i === 3) filename = 'Number 3 (1).png'
+            this.load.image('sprite-numero-' + i, 'assets/sprites/puzzles/' + filename)
+        }
+
+        this.load.image('sprite-pilha', 'assets/sprites/puzzles/pilha02.png')
+        this.load.image('sprite-comida', 'assets/sprites/puzzles/comida.png')
+        this.load.image('sprite-chave', 'assets/sprites/puzzles/chave.png')
+        this.load.image('sprite-papel', 'assets/sprites/puzzles/papel.png')
     }
 
     private criarCamada(
@@ -1512,7 +1525,7 @@ export class GameScene
                 item,
                 index,
             ) => {
-                this.createSolidTexture(
+                if (!this.textures.exists(item.textureKey)) this.createSolidTexture(
                     item.textureKey,
                     26,
                     26,
@@ -1732,13 +1745,15 @@ export class GameScene
 
         ITENS_DOS_PUZZLES.forEach(
             (entrada) => {
-                this.createSolidTexture(
-                    entrada.item
-                        .textureKey,
-                    26,
-                    26,
-                    entrada.cor,
-                )
+                if (!this.textures.exists(entrada.item.textureKey)) {
+                    this.createSolidTexture(
+                        entrada.item
+                            .textureKey,
+                        26,
+                        26,
+                        entrada.cor,
+                    )
+                }
 
                 this.collision
                     .spawnPickup(
