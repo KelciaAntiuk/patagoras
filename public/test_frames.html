@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Spritesheet Frame Inspector</title>
+  <style>
+    body { background: #1a1a24; color: #fff; font-family: sans-serif; padding: 20px; }
+    h1 { font-size: 20px; }
+    .grid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 30px; }
+    .frame-box { background: #2a2a3a; border: 1px solid #444; border-radius: 4px; padding: 6px; text-align: center; }
+    .frame-box canvas { image-rendering: pixelated; width: 72px; height: 72px; background: #333; }
+    .frame-box .label { font-size: 13px; font-weight: bold; margin-top: 4px; color: #4ade80; }
+  </style>
+</head>
+<body>
+  <h1>Inspector de Frames</h1>
+  <div style="margin-bottom:12px;">
+    <button onclick="carregar('/assets/sprites/character/character-sheet.png', 24, 24)">character-sheet.png (24x24)</button>
+    <button onclick="carregar('/assets/sprites/character/pato-sheet.png', 32, 32)">pato-sheet (32x32?)</button>
+    <button onclick="carregar('/assets/sprites/character/pato-sheet.png', 24, 24)">pato-sheet (24x24?)</button>
+    <button onclick="carregar('/assets/sprites/character/pato-sheet.png', 20, 18)">pato-sheet (20x18?)</button>
+    <button onclick="carregar('/assets/sprites/character/pato-sheet.png', 16, 16)">pato-sheet (16x16?)</button>
+  </div>
+  <div id="info">Carregando...</div>
+  <div class="grid" id="grid"></div>
+
+  <script>
+    function carregar(src, frameW, frameH) {
+      const img = new Image();
+      img.src = src;
+      img.onload = () => {
+        const W = img.naturalWidth;
+        const H = img.naturalHeight;
+        const cols = Math.floor(W / frameW);
+        const rows = Math.floor(H / frameH);
+        const total = cols * rows;
+
+        document.getElementById('info').innerHTML = `
+          <p>Imagem: <b>${src}</b> (${W}x${H}px) | Frame: <b>${frameW}x${frameH}px</b> | Colunas: <b>${cols}</b> (resto ${W % frameW}px) | Linhas: <b>${rows}</b> (resto ${H % frameH}px) | Total: <b>${total}</b></p>
+        `;
+
+        const grid = document.getElementById('grid');
+        grid.innerHTML = '';
+        for (let i = 0; i < total; i++) {
+          const col = i % cols;
+          const row = Math.floor(i / cols);
+
+          const box = document.createElement('div');
+          box.className = 'frame-box';
+
+          const canvas = document.createElement('canvas');
+          canvas.width = frameW;
+          canvas.height = frameH;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, col * frameW, row * frameH, frameW, frameH, 0, 0, frameW, frameH);
+
+          const label = document.createElement('div');
+          label.className = 'label';
+          label.innerText = `Frame ${i}`;
+
+          box.appendChild(canvas);
+          box.appendChild(label);
+          grid.appendChild(box);
+        }
+      };
+    }
+    carregar('/assets/sprites/character/pato-sheet.png', 20, 18);
+  </script>
+</body>
+</html>

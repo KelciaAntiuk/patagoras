@@ -1,6 +1,8 @@
 import Phaser from 'phaser'
 
 import { alternanciaLiberada } from '../ui/atalhos'
+import { InventoryUI } from '../ui/Inventory/InventoryUI'
+import { SLOT_SIZE } from '../ui/Inventory/InventorySlotUI'
 
 import {
     CollisionSystem,
@@ -20,12 +22,10 @@ import type {
 } from '../system/Collision/Pickup'
 
 import {
-    INVENTORY_EVENTS,
     ItemKind,
 } from '../system/Inventory/Inventory.types'
 
 import type {
-    InventorySlot,
     ItemDefinition,
 } from '../system/Inventory/Inventory.types'
 
@@ -106,7 +106,24 @@ import type {
     PuzzleDoor,
 } from '../system/Door/PuzzleDoor'
 
-const PLAYER_SPEED = 180
+const PLAYER_SPEED = 80
+
+const ZOOM_CAMERA = 2
+const ESCALA_INVENTARIO_HUD = 0.7
+const FONTE_HUD = '"Patrick Hand", Georgia, serif'
+const CORACAO = [
+    '.oo.oo.',
+    'owroRro',
+    'orrrrro',
+    'orrrrro',
+    '.orrro.',
+    '..oro..',
+    '...o...',
+]
+const PIXEL_CORACAO = 3
+const RAIO_VISAO = 55
+const RAIO_ESCURIDAO = 100
+const TAMANHO_ESCURIDAO = 800
 
 const WORLD_WIDTH = 2400
 const WORLD_HEIGHT = 1800
@@ -335,6 +352,36 @@ const ITENS_DOS_PUZZLES: readonly {
         y: 515,
         cor: 0x81ecec,
     },
+    {
+        item: {
+            id: 'sala2-numero-2',
+            name: 'Número 2',
+            description:
+                'Um dois recortado de uma cartolina de chamada.',
+            textureKey:
+                'item-sala2-2',
+            kind: ItemKind.Number,
+            value: 2,
+        },
+        x: 340,
+        y: 380,
+        cor: 0xfab1a0,
+    },
+    {
+        item: {
+            id: 'sala2-numero-4',
+            name: 'Número 4',
+            description:
+                'Um quatro recortado de uma cartolina de chamada.',
+            textureKey:
+                'item-sala2-4',
+            kind: ItemKind.Number,
+            value: 4,
+        },
+        x: 468,
+        y: 392,
+        cor: 0xfdcb6e,
+    },
 ]
 
 const TEST_ITEM_COLORS = [
@@ -369,6 +416,9 @@ export class GameScene
 
     private foodThrow!:
         FoodThrowSystem
+
+    private escuridao!:
+        Phaser.GameObjects.Image
 
     private playerLife!:
         PlayerLifeSystem
@@ -412,31 +462,44 @@ export class GameScene
     private debugKey!:
         Phaser.Input.Keyboard.Key
 
-    private inventoryText!:
+    private inventarioHud!:
+        InventoryUI
+
+    private controlesText!:
         Phaser.GameObjects.Text
+
+    private coracoes:
+        Phaser.GameObjects.Image[] = []
+
+    private tweenStatus?:
+        Phaser.Tweens.Tween
 
     private statusText!:
         Phaser.GameObjects.Text
 
-    private livesText!:
-        Phaser.GameObjects.Text
 
     private pickupRadiusDebug!:
         Phaser.GameObjects.Graphics
 
-    private layerParedesInvisiveis!:
-        Phaser.Tilemaps.TilemapLayer | null
+    private layersParedesInvisiveis:
+        Phaser.Tilemaps.TilemapLayer[] = []
 
     private hiddenTiles:
         Phaser.Tilemaps.Tile[] = []
 
     private debugVisible = false
 
+    private ultimaDirecao:
+        | 'frente'
+        | 'diagonal-baixo'
+        | 'lado'
+        | 'diagonal-cima'
+        | 'cima' = 'frente'
     constructor() {
         super('GameScene')
     }
 
-    preload(): void {
+   preload(): void {
         this.load.image(
             'old-house',
             'assets/tilesets/old house.png',
@@ -452,10 +515,49 @@ export class GameScene
             'assets/tilesets/Dungeon_Tileset.png',
         )
 
+        this.load.image(
+            'mobilha',
+            'assets/tilesets/mobilha.png',
+        )
+
+        this.load.image(
+            'rundown-house',
+            'assets/tilesets/A rundown house.png',
+        )
+
+        this.load.image(
+            'mobilha2.2',
+            'assets/tilesets/mobilha2.2.png',
+        )
+
+        this.load.image(
+            'mobilha3',
+            'assets/tilesets/mobilha3.png',
+        )
+
         this.load.tilemapTiledJSON(
             'mapa-principal',
             'assets/maps/mapaPrincipal.json',
         )
+
+        // Carregamento dos spritesheets do personagem e do Patágoras
+        this.load.spritesheet(
+            'sprite_jogador',
+            'assets/sprites/character/character-sheet.png',
+            { frameWidth: 24, frameHeight: 24 }
+        )
+
+        this.load.spritesheet(
+            'sprite_pato',
+            'assets/sprites/character/pato-sheet.png',
+            { frameWidth: 20, frameHeight: 18 }
+        )
+
+        // Carregamento individual das sprites do Patágoras
+        for (let i = 3; i <= 20; i++) {
+            const pad = String(i).padStart(4, '0')
+            this.load.image(`pato-${pad}`, `assets/sprites/character/Sprite-${pad}.png`)
+        }
     }
 
     private criarCamada(
@@ -476,6 +578,8 @@ export class GameScene
     }
 
     create(dados?: { abrirMenu?: boolean }): void {
+        this.createTestTextures()
+
         const map =
             this.make.tilemap({
                 key: 'mapa-principal',
@@ -499,10 +603,45 @@ export class GameScene
                 'dungeon-tileset',
             )
 
+        const automapTileset =
+            map.addTilesetImage(
+                'automap-tiles',
+                'automap-tiles',
+            )
+
+        const mobilhaTileset =
+            map.addTilesetImage(
+                'mobilha',
+                'mobilha',
+            )
+
+        const rundownHouseTileset =
+            map.addTilesetImage(
+                'A rundown house',
+                'rundown-house',
+            )
+
+        const mobilha22Tileset =
+            map.addTilesetImage(
+                'mobilha2.2',
+                'mobilha2.2',
+            )
+
+        const mobilha3Tileset =
+            map.addTilesetImage(
+                'mobilha3',
+                'mobilha3',
+            )
+
         const rawTilesets = [
             oldHouseTileset,
             runSheetTileset,
             dungeonTileset,
+            automapTileset,
+            mobilhaTileset,
+            rundownHouseTileset,
+            mobilha22Tileset,
+            mobilha3Tileset,
         ]
         // Filter out nulls to prevent crashes
         const tilesets = rawTilesets.filter(ts => ts !== null) as Phaser.Tilemaps.Tileset[]
@@ -510,42 +649,215 @@ export class GameScene
         const mapOriginX = 100
         const mapOriginY = 100
 
-        const layerBruto = this.criarCamada(map, 'mapa bruto', tilesets, mapOriginX, mapOriginY)
-        layerBruto?.setDepth(0)
+        const refLayerData =
+            map.layers.find((l) => l.name === 'colisao') ??
+            map.layers[0]
+        const refX = refLayerData ? refLayerData.x : 0
+        const refY = refLayerData ? refLayerData.y : 0
 
-        const layerSolo = this.criarCamada(map, 'detalhes de solo', tilesets, mapOriginX, mapOriginY)
-        layerSolo?.setDepth(1)
+        this.layersParedesInvisiveis = []
+        const layersParedes: Phaser.Tilemaps.TilemapLayer[] = []
+        let layerColisao: Phaser.Tilemaps.TilemapLayer | null = null
 
-        const layerParedes = this.criarCamada(map, 'paredes', tilesets, mapOriginX, mapOriginY)
-        layerParedes?.setDepth(2)
+        for (const layerData of map.layers) {
+            if (layerData.width === 0 || layerData.height === 0) {
+                continue
+            }
 
-        const layerParedes2 = this.criarCamada(map, 'paredes 2', tilesets, mapOriginX, mapOriginY)
-        layerParedes2?.setDepth(3)
+            const nome = layerData.name
+            const nomeLower = nome.toLowerCase()
 
-        const layerParedesInvisiveis = this.criarCamada(map, 'paredes invisiveis', tilesets, mapOriginX, mapOriginY + 256)
-        layerParedesInvisiveis?.setVisible(true)
-        layerParedesInvisiveis?.setDepth(10) // Acima do personagem
+            if (nomeLower === 'colisao') {
+                const lx = mapOriginX + Math.round(layerData.x - refX)
+                const ly = mapOriginY + Math.round(layerData.y - refY)
+                layerColisao = this.criarCamada(map, nome, tilesets, lx, ly)
+                layerColisao?.setVisible(false)
+                continue
+            }
 
-        const layerProps = this.criarCamada(map, 'detalhes de Props', tilesets, mapOriginX, mapOriginY)
-        layerProps?.setDepth(11)
+            if (!layerData.visible || nomeLower.includes('esqueleto')) {
+                continue
+            }
 
-        // Camada de colisão personalizada desenhada no Tiled
-        const layerColisao = this.criarCamada(map, 'colisao', tilesets, mapOriginX, mapOriginY)
-        layerColisao?.setVisible(false)
+            const lx = mapOriginX + Math.round(layerData.x - refX)
+            const ly = mapOriginY + Math.round(layerData.y - refY)
+            const layer = this.criarCamada(map, nome, tilesets, lx, ly)
+            if (!layer) {
+                continue
+            }
 
-        this.layerParedesInvisiveis = layerParedesInvisiveis
+            layer.setVisible(true)
 
-        this.createTestTextures()
+            if (nomeLower.includes('mapa bruto')) {
+                layer.setDepth(0)
+            } else if (nomeLower.includes('detalhes de solo')) {
+                layer.setDepth(1)
+            } else if (nomeLower.includes('paredes 2')) {
+                layer.setDepth(3)
+                layersParedes.push(layer)
+            } else if (nomeLower.includes('paredes invisiveis')) {
+                layer.setDepth(10)
+                this.layersParedesInvisiveis.push(layer)
+            } else if (nomeLower.includes('paredes')) {
+                layer.setDepth(2)
+                layersParedes.push(layer)
+            } else if (nomeLower.includes('mobilha invisivel')) {
+                layer.setDepth(10)
+                this.layersParedesInvisiveis.push(layer)
+            } else if (nomeLower.includes('mobilha por cima da parede')) {
+                layer.setDepth(11)
+                this.layersParedesInvisiveis.push(layer)
+            } else if (nomeLower.includes('mobilha')) {
+                layer.setDepth(4)
+            } else if (nomeLower.includes('props')) {
+                layer.setDepth(11)
+            }
+        }
 
-        // PERSONAGEM (bloco 16x16 posicionado dentro da casa)
+        // Criação do jogador
         this.player =
             this.physics.add.sprite(
                 SPAWN_JOGADOR_X,
                 SPAWN_JOGADOR_Y,
-                'player',
+                'sprite_jogador',
             )
         this.player.setDepth(5)
+        // Hitbox nos pés (12x12) para frame de 24x24 (offset 6, 10)
+        this.player.setSize(12, 12)
+        this.player.setOffset(6, 10)
 
+        // Movimentação do personagem para frente (baixo) - frames 8, 9, 10, 11
+        this.anims.create({
+            key: 'andar-frente',
+            frames: this.anims.generateFrameNumbers('sprite_jogador', { start: 8, end: 11 }),
+            frameRate: 8,
+            repeat: -1,
+        })
+
+        // Movimentação do personagem para diagonal abaixo - frames 14 a 17
+        this.anims.create({
+            key: 'andar-diagonal-baixo',
+            frames: this.anims.generateFrameNumbers('sprite_jogador', { start: 12, end: 15 }),
+            frameRate: 8,
+            repeat: -1,
+        })
+
+        // Movimentação do personagem para os lados (esquerda/direita) - frames 16, 17, 18, 19
+        this.anims.create({
+            key: 'andar-lado',
+            frames: this.anims.generateFrameNumbers('sprite_jogador', { start: 16, end: 19 }),
+            frameRate: 8,
+            repeat: -1,
+        })
+
+        // Movimentação do personagem para diagonal acima - frames 20, 21, 22, 23
+        this.anims.create({
+            key: 'andar-diagonal-cima',
+            frames: this.anims.generateFrameNumbers('sprite_jogador', { start: 20, end: 23 }),
+            frameRate: 8,
+            repeat: -1,
+        })
+
+        // Movimentação do personagem para trás (cima) - frames 24 a 27 (olhando apenas para cima)
+        this.anims.create({
+            key: 'andar-cima',
+            frames: this.anims.generateFrameNumbers('sprite_jogador', { start: 24, end: 27 }),
+            frameRate: 8,
+            repeat: -1,
+        })
+
+        // Animações de parado (Idle) para cada direção
+        this.anims.create({
+            key: 'parado-frente',
+            frames: [{ key: 'sprite_jogador', frame: 0 }],
+            frameRate: 1,
+            repeat: -1,
+        })
+
+        this.anims.create({
+            key: 'parado-diagonal-baixo',
+            frames: [{ key: 'sprite_jogador', frame: 12 }],
+            frameRate: 1,
+            repeat: -1,
+        })
+
+        this.anims.create({
+            key: 'parado-lado',
+            frames: [{ key: 'sprite_jogador', frame: 16 }],
+            frameRate: 1,
+            repeat: -1,
+        })
+
+        this.anims.create({
+            key: 'parado-diagonal-cima',
+            frames: [{ key: 'sprite_jogador', frame: 4 }],
+            frameRate: 1,
+            repeat: -1,
+        })
+
+        this.anims.create({
+            key: 'parado-cima',
+            frames: [{ key: 'sprite_jogador', frame: 24 }],
+            frameRate: 1,
+            repeat: -1,
+        })
+
+        this.player.anims.play('parado-frente')
+
+        // Animação do Patágoras para baixo (S) - sprites 0003, 0004, 0005 e 0006
+        this.anims.create({
+            key: 'pato-andar-baixo',
+            frames: [
+                { key: 'pato-0003' },
+                { key: 'pato-0004' },
+                { key: 'pato-0005' },
+                { key: 'pato-0006' },
+            ],
+            frameRate: 8,
+            repeat: -1,
+        })
+
+        // Animação do Patágoras para cima (W) - sprites 0007 até 0012
+        this.anims.create({
+            key: 'pato-andar-cima',
+            frames: [
+                { key: 'pato-0007' },
+                { key: 'pato-0008' },
+                { key: 'pato-0009' },
+                { key: 'pato-0010' },
+                { key: 'pato-0011' },
+                { key: 'pato-0012' },
+            ],
+            frameRate: 8,
+            repeat: -1,
+        })
+
+        // Animação do Patágoras para os lados (A / D) - sprites 0013 até 0018
+        this.anims.create({
+            key: 'pato-andar-lado',
+            frames: [
+                { key: 'pato-0013' },
+                { key: 'pato-0014' },
+                { key: 'pato-0015' },
+                { key: 'pato-0016' },
+                { key: 'pato-0017' },
+                { key: 'pato-0018' },
+            ],
+            frameRate: 8,
+            repeat: -1,
+        })
+
+        // Animação do Patágoras na diagonal abaixo (S + A / S + D) - sprites 0019 e 0020
+        this.anims.create({
+            key: 'pato-andar-diagonal-baixo',
+            frames: [
+                { key: 'pato-0019' },
+                { key: 'pato-0020' },
+            ],
+            frameRate: 6,
+            repeat: -1,
+        })
+        
         // SISTEMA DE VIDAS DO PLAYER
         this.playerLife =
             new PlayerLifeSystem()
@@ -602,7 +914,7 @@ export class GameScene
         const wallRects =
             this.extractWallRects(
                 hasCustomCollision
-                    ? [layerColisao] : [layerParedes, layerParedes2],
+                    ? [layerColisao] : layersParedes,
             )
 
         this.collision
@@ -710,6 +1022,14 @@ export class GameScene
             )
 
         this.criarPortas()
+
+        // PUZZLE DENTRO DA SALA 2 (LIBERA A PORTA DA COZINHA)
+        this.puzzles
+            .adicionarGatilho(
+                420,
+                338,
+                'sala-aula-2',
+            )
         // SISTEMA DE COMIDA
         this.foodThrow =
             new FoodThrowSystem(
@@ -822,6 +1142,10 @@ export class GameScene
         this.createTestHud()
 
         this.bindTestEvents()
+
+        this.criarEscuridao()
+
+        this.criarCameraHud()
 
         // LIMPEZA AO SAIR DA SCENE
         this.events.once(
@@ -964,8 +1288,43 @@ export class GameScene
                 playerSpeed,
             )
 
+        // ATUALIZA ANIMAÇÃO DO JOGADOR CONFORME MOVIMENTO
+        if (direction.length() > 0) {
+            if (x !== 0 && y < 0) {
+                // W + A ou W + D → diagonal acima
+                this.ultimaDirecao = 'diagonal-cima'
+                this.player.setFlipX(x < 0)
+                this.player.anims.play('andar-diagonal-cima', true)
+            } else if (y < 0) {
+                // W puro → olha apenas para cima
+                this.ultimaDirecao = 'cima'
+                this.player.setFlipX(false)
+                this.player.anims.play('andar-cima', true)
+            } else if (x !== 0 && y > 0) {
+                this.ultimaDirecao = 'diagonal-baixo'
+                this.player.setFlipX(x < 0)
+                this.player.anims.play('andar-diagonal-baixo', true)
+            } else if (x !== 0) {
+                this.ultimaDirecao = 'lado'
+                this.player.setFlipX(x < 0)
+                this.player.anims.play('andar-lado', true)
+            } else if (y > 0) {
+                this.ultimaDirecao = 'frente'
+                this.player.setFlipX(false)
+                this.player.anims.play('andar-frente', true)
+            }
+        } else {
+            this.player.anims.play('parado-' + this.ultimaDirecao, true)
+        }
+
         // ATUALIZA IA DO PATÁGORAS
         this.patagorasAI.update()
+        this.patagoras.updateAnimation()
+
+        this.escuridao.setPosition(
+            this.player.x,
+            this.player.y,
+        )
 
         // ATUALIZA QUAL ITEM ESTÁ
         // MAIS PRÓXIMO DO PLAYER
@@ -1041,7 +1400,7 @@ export class GameScene
 
         this.updatePickupRadiusDebug()
 
-        if (this.layerParedesInvisiveis) {
+        if (this.layersParedesInvisiveis.length > 0) {
             // Restaura as paredes que deixaram de cobrir o personagem
             for (const tile of this.hiddenTiles) {
                 tile.alpha = 1
@@ -1049,26 +1408,140 @@ export class GameScene
             this.hiddenTiles = []
 
             // Pega apenas os blocos de paredes invisíveis que estão sobre o personagem
-            const overlappingTiles =
-                this.layerParedesInvisiveis.getTilesWithinWorldXY(
-                    this.player.x - 6,
-                    this.player.y - 18,
-                    12,
-                    24,
-                    { isNotEmpty: true },
-                )
+            for (const layerInvisivel of this.layersParedesInvisiveis) {
+                const overlappingTiles =
+                    layerInvisivel.getTilesWithinWorldXY(
+                        this.player.x - 6,
+                        this.player.y - 18,
+                        12,
+                        24,
+                        { isNotEmpty: true },
+                    )
 
-            for (const tile of overlappingTiles) {
-                if (tile && tile.index > 0) {
-                    tile.alpha = 0 // Apenas esta parede do player fica invisível!
-                    this.hiddenTiles.push(tile)
+                for (const tile of overlappingTiles) {
+                    if (tile && tile.index > 0) {
+                        tile.alpha = 0 // Apenas esta parede do player fica invisível!
+                        this.hiddenTiles.push(tile)
+                    }
                 }
             }
         }
     }
 
+    private criarEscuridao(): void {
+        if (!this.textures.exists('escuridao')) {
+            const textura =
+                this.textures.createCanvas(
+                    'escuridao',
+                    TAMANHO_ESCURIDAO,
+                    TAMANHO_ESCURIDAO,
+                )!
+            const ctx = textura.getContext()
+            const centro = TAMANHO_ESCURIDAO / 2
+            const gradiente =
+                ctx.createRadialGradient(
+                    centro,
+                    centro,
+                    RAIO_VISAO,
+                    centro,
+                    centro,
+                    RAIO_ESCURIDAO,
+                )
+            gradiente.addColorStop(0, 'rgba(0, 0, 0, 0)')
+            gradiente.addColorStop(1, 'rgba(0, 0, 0, 1)')
+            ctx.fillStyle = gradiente
+            ctx.fillRect(0, 0, TAMANHO_ESCURIDAO, TAMANHO_ESCURIDAO)
+            textura.refresh()
+        }
+
+        this.escuridao =
+            this.add
+                .image(
+                    this.player.x,
+                    this.player.y,
+                    'escuridao',
+                )
+                .setDepth(90000)
+    }
+
+    private criarCameraHud(): void {
+        const ehHud = (
+            objeto: Phaser.GameObjects.GameObject,
+        ): boolean =>
+            'scrollFactorX' in objeto &&
+            objeto.scrollFactorX === 0
+
+        const hud =
+            this.children.list
+                .filter(ehHud)
+
+        const cameraHud =
+            this.cameras.add(
+                0,
+                0,
+                this.scale.width,
+                this.scale.height,
+            )
+
+        cameraHud.ignore(
+            this.children.list
+                .filter((o) => !ehHud(o)),
+        )
+
+        this.cameras.main
+            .setZoom(ZOOM_CAMERA)
+            .ignore(hud)
+
+        const raiz = (
+            objeto: Phaser.GameObjects.GameObject,
+        ): Phaser.GameObjects.GameObject => {
+            let atual = objeto
+            while (atual.parentContainer) {
+                atual = atual.parentContainer
+            }
+            return atual
+        }
+
+        const aoAdicionar = (
+            objeto: Phaser.GameObjects.GameObject,
+        ): void => {
+            queueMicrotask(() => {
+                if (!objeto.scene) {
+                    return
+                }
+                if (ehHud(raiz(objeto))) {
+                    this.cameras.main.ignore(objeto)
+                } else {
+                    cameraHud.ignore(objeto)
+                }
+            })
+        }
+
+        this.events.on(
+            Phaser.Scenes.Events.ADDED_TO_SCENE,
+            aoAdicionar,
+        )
+
+        this.events.once(
+            'shutdown',
+            () => {
+                this.events.off(
+                    Phaser.Scenes.Events.ADDED_TO_SCENE,
+                    aoAdicionar,
+                )
+            },
+        )
+    }
+
     private createTestTextures():
         void {
+
+        this.createSolidTexture(
+            'automap-tiles',
+            80,
+            16,
+            0xff0000,
+        )
 
         this.createSolidTexture(
             'player',
@@ -1257,11 +1730,10 @@ export class GameScene
             porta.def
                 .mensagemAbrir
         ) {
-            this.statusText
-                .setText(
-                    porta.def
-                        .mensagemAbrir,
-                )
+            this.mostrarStatus(
+                porta.def
+                    .mensagemAbrir,
+            )
         }
 
         return true
@@ -1360,109 +1832,114 @@ export class GameScene
 
     private createTestHud():
         void {
+        criarTexturasCoracao(this)
 
-        this.add
-            .text(
-                16,
-                16,
-
-                'WASD: mover | E: interagir | 1/2/3: soltar | Q: comida | ESC: menu | F3: debug',
-
-                {
-                    fontSize:
-                        '16px',
-
-                    color:
-                        '#ffffff',
-
-                    backgroundColor:
-                        '#000000aa',
-
-                    padding: {
-                        x: 8,
-                        y: 6,
+        this.controlesText =
+            this.add
+                .text(
+                    0,
+                    0,
+                    'WASD mover  ·  E interagir  ·  1/2/3 soltar  ·  Q comida  ·  ESC menu',
+                    {
+                        fontFamily: FONTE_HUD,
+                        fontSize: '13px',
+                        color: '#f4efe4',
+                        backgroundColor: '#1a1208aa',
+                        padding: { x: 8, y: 3 },
                     },
-                },
+                )
+                .setOrigin(1, 0)
+                .setAlpha(0.75)
+                .setResolution(2)
+                .setScrollFactor(0)
+                .setDepth(100000)
+
+        this.inventarioHud =
+            new InventoryUI(
+                this,
+                this.inventory,
+                0,
+                0,
             )
-            .setScrollFactor(0)
-            .setDepth(100000)
-
-        this.inventoryText =
-            this.add
-                .text(
-                    16,
-                    55,
-                    '',
-                    {
-                        fontSize:
-                            '16px',
-
-                        color:
-                            '#ffffff',
-
-                        backgroundColor:
-                            '#000000aa',
-
-                        padding: {
-                            x: 8,
-                            y: 6,
-                        },
-                    },
-                )
-                .setScrollFactor(0)
+                .setScale(ESCALA_INVENTARIO_HUD)
                 .setDepth(100000)
 
-        this.livesText =
-            this.add
-                .text(
-                    16,
-                    145,
-                    '',
-                    {
-                        fontSize:
-                            '16px',
+        this.inventory
+            .getSlots()
+            .forEach((_, indice, slots) => {
+                const larguraSlots =
+                    slots.length * SLOT_SIZE +
+                    (slots.length - 1) * 10
+                const xSlot =
+                    -larguraSlots / 2 +
+                    indice * (SLOT_SIZE + 10)
 
-                        color:
-                            '#ffffff',
-
-                        backgroundColor:
-                            '#000000aa',
-
-                        padding: {
-                            x: 8,
-                            y: 6,
-                        },
-                    },
+                this.inventarioHud.add(
+                    this.add
+                        .text(
+                            xSlot + 3,
+                            -SLOT_SIZE / 2,
+                            String(indice + 1),
+                            {
+                                fontFamily: FONTE_HUD,
+                                fontSize: '14px',
+                                color: '#d8b46a',
+                            },
+                        )
+                        .setResolution(2),
                 )
-                .setScrollFactor(0)
-                .setDepth(100000)
+            })
+
+        this.coracoes =
+            Array.from(
+                { length: this.playerLife.getMaxLives() },
+                () =>
+                    this.add
+                        .image(0, 0, 'coracao-cheio')
+                        .setOrigin(0, 1)
+                        .setScrollFactor(0)
+                        .setDepth(100000),
+            )
 
         this.statusText =
             this.add
                 .text(
-                    16,
-                    185,
-
-                    'Aproxime-se de um item.',
-
+                    0,
+                    0,
+                    '',
                     {
-                        fontSize:
-                            '16px',
-
-                        color:
-                            '#ffffff',
-
-                        backgroundColor:
-                            '#000000aa',
-
-                        padding: {
-                            x: 8,
-                            y: 6,
-                        },
+                        fontFamily: FONTE_HUD,
+                        fontSize: '17px',
+                        color: '#f4efe4',
+                        backgroundColor: '#1a1208dd',
+                        padding: { x: 12, y: 5 },
+                        align: 'center',
                     },
                 )
+                .setOrigin(0.5, 1)
+                .setResolution(2)
                 .setScrollFactor(0)
                 .setDepth(100000)
+                .setVisible(false)
+
+        this.posicionarHud()
+
+        this.scale.on(
+            Phaser.Scale.Events.RESIZE,
+            this.posicionarHud,
+            this,
+        )
+
+        this.events.once(
+            'shutdown',
+            () => {
+                this.scale.off(
+                    Phaser.Scale.Events.RESIZE,
+                    this.posicionarHud,
+                    this,
+                )
+            },
+        )
 
         this.pickupRadiusDebug =
             this.add
@@ -1470,34 +1947,14 @@ export class GameScene
                 .setDepth(99999)
                 .setVisible(false)
 
-        this.updateInventoryHud(
-            this.inventory
-                .getSlots(),
-        )
-
         this.updateLivesHud(
             this.playerLife
                 .getLives(),
-            this.playerLife
-                .getMaxLives(),
         )
     }
 
     private bindTestEvents():
         void {
-
-        this.inventory.on(
-            INVENTORY_EVENTS.CHANGED,
-
-            (
-                slots:
-                    readonly InventorySlot[],
-            ) => {
-                this.updateInventoryHud(
-                    slots,
-                )
-            },
-        )
 
         this.collision.on(
             COLLISION_EVENTS
@@ -1507,9 +1964,9 @@ export class GameScene
                 pickup:
                     Pickup,
             ) => {
-                this.statusText
-                    .setText(
+                this.mostrarStatus(
                         `[E] Coletar: ${pickup.item.name}`,
+                        true,
                     )
             },
         )
@@ -1519,9 +1976,8 @@ export class GameScene
                 .PICKUP_RANGE_LEFT,
 
             () => {
-                this.statusText
-                    .setText(
-                        'Aproxime-se de um item.',
+                this.mostrarStatus(
+                        '',
                     )
             },
         )
@@ -1534,8 +1990,7 @@ export class GameScene
                 pickup:
                     Pickup,
             ) => {
-                this.statusText
-                    .setText(
+                this.mostrarStatus(
                         `Coletado: ${pickup.item.name}`,
                     )
             },
@@ -1546,8 +2001,7 @@ export class GameScene
                 .PICKUP_BLOCKED,
 
             () => {
-                this.statusText
-                    .setText(
+                this.mostrarStatus(
                         'Inventário cheio.',
                     )
             },
@@ -1569,22 +2023,21 @@ export class GameScene
                 }
 
                 if (puzzleId === 'biblioteca-pista') {
-                    this.statusText.setText(
+                    this.mostrarStatus(
                         'Pista anotada! Páginas marcadas: 3, 8 e 1. Use o código no armário.',
                     )
                     return
                 }
 
                 if (puzzleId === 'biblioteca-senha') {
-                    this.statusText.setText(
+                    this.mostrarStatus(
                         'Armário destrancado! Você encontrou os documentos confidenciais do Diretor.',
                     )
                     return
                 }
 
-                this.statusText
-                    .setText(
-                        'Puzzle resolvido!',
+                this.mostrarStatus(
+                    'Puzzle resolvido!',
                     )
             },
         )
@@ -1596,8 +2049,7 @@ export class GameScene
             (
                 porta: PuzzleDoor,
             ) => {
-                this.statusText
-                    .setText(
+                this.mostrarStatus(
                         porta.def
                             .mensagemTrancada ??
                             'A porta está trancada.',
@@ -1617,8 +2069,7 @@ export class GameScene
                     fechamento.motivo ===
                     PuzzleCloseReason.Atacado
                 ) {
-                    this.statusText
-                        .setText(
+                    this.mostrarStatus(
                             'O Patágoras te pegou! O puzzle foi fechado.',
                         )
                 }
@@ -1628,8 +2079,7 @@ export class GameScene
         this.foodThrow.on(
             FOOD_EVENTS.NO_FOOD,
             () => {
-                this.statusText
-                    .setText(
+                this.mostrarStatus(
                         'Você não possui comida.',
                     )
             },
@@ -1638,8 +2088,7 @@ export class GameScene
         this.foodThrow.on(
             FOOD_EVENTS.BUSY,
             () => {
-                this.statusText
-                    .setText(
+                this.mostrarStatus(
                         'A comida já está sendo arremessada.',
                     )
             },
@@ -1648,8 +2097,7 @@ export class GameScene
         this.foodThrow.on(
             FOOD_EVENTS.THROW_STARTED,
             () => {
-                this.statusText
-                    .setText(
+                this.mostrarStatus(
                         'Comida arremessada.',
                     )
             },
@@ -1658,8 +2106,7 @@ export class GameScene
         this.foodThrow.on(
             FOOD_EVENTS.LANDED,
             () => {
-                this.statusText
-                    .setText(
+                this.mostrarStatus(
                         'A comida caiu no chão.',
                     )
             },
@@ -1668,8 +2115,7 @@ export class GameScene
         this.foodThrow.on(
             FOOD_EVENTS.HIT_PATAGORAS,
             () => {
-                this.statusText
-                    .setText(
+                this.mostrarStatus(
                         'Patágoras comeu a comida e dormiu.',
                     )
             },
@@ -1679,16 +2125,13 @@ export class GameScene
             PLAYER_LIFE_EVENTS.CHANGED,
             (
                 lives: number,
-                maxLives: number,
             ) => {
                 this.updateLivesHud(
                     lives,
-                    maxLives,
                 )
 
                 if (lives > 0) {
-                    this.statusText
-                        .setText(
+                    this.mostrarStatus(
                             `Patágoras acertou você! Vidas restantes: ${lives}.`,
                         )
                 }
@@ -1707,8 +2150,7 @@ export class GameScene
                 this.patagoras
                     .stop()
 
-                this.statusText
-                    .setText(
+                this.mostrarStatus(
                         'GAME OVER',
                     )
 
@@ -1717,48 +2159,107 @@ export class GameScene
         )
     }
 
-    private updateInventoryHud(
-        slots:
-            readonly InventorySlot[],
-    ): void {
+    private areaVisivel():
+        Phaser.Geom.Rectangle {
+        const { width, height } =
+            this.scale.gameSize
+        const pai =
+            this.scale.parentSize
+        const escala =
+            pai.width > 0 && pai.height > 0
+                ? Math.max(
+                    pai.width / width,
+                    pai.height / height,
+                )
+                : 1
+        const largura =
+            Math.min(width, pai.width / escala || width)
+        const altura =
+            Math.min(height, pai.height / escala || height)
 
-        const lines =
-            slots.map(
-                (
-                    item,
-                    index,
-                ) => {
-                    return `${index + 1}. ${item?.name ?? 'vazio'}`
-                },
+        return new Phaser.Geom.Rectangle(
+            (width - largura) / 2,
+            (height - altura) / 2,
+            largura,
+            altura,
+        )
+    }
+
+    private posicionarHud(): void {
+        const area =
+            this.areaVisivel()
+        const margem = 14
+
+        this.controlesText.setPosition(
+            area.right - margem,
+            area.top + margem,
+        )
+
+        const larguraInventario =
+            this.inventarioHud.getBounds().width
+        const alturaInventario =
+            this.inventarioHud.getBounds().height
+
+        this.inventarioHud.setPosition(
+            area.left + margem + larguraInventario / 2,
+            area.bottom - margem - alturaInventario / 2,
+        )
+
+        const topoInventario =
+            area.bottom - margem - alturaInventario
+
+        this.coracoes.forEach((coracao, indice) => {
+            coracao.setPosition(
+                area.left + margem + 2 + indice * (coracao.width + 4),
+                topoInventario - 6,
             )
+        })
 
-        this.inventoryText
-            .setText([
-                'Inventário de teste:',
-                ...lines,
-            ])
+        this.statusText.setPosition(
+            area.centerX,
+            area.bottom - margem,
+        )
+    }
+
+    private mostrarStatus(
+        texto: string,
+        fixo = false,
+    ): void {
+        this.tweenStatus?.remove()
+        this.tweenStatus = undefined
+
+        this.statusText.setText(texto)
+        this.statusText
+            .setAlpha(1)
+            .setVisible(texto !== '')
+
+        if (fixo || texto === '') {
+            return
+        }
+
+        this.tweenStatus =
+            this.tweens.add({
+                targets: this.statusText,
+                alpha: 0,
+                delay: 2500,
+                duration: 600,
+                onComplete: () => {
+                    this.statusText.setVisible(false)
+                    this.tweenStatus = undefined
+                },
+            })
     }
 
     private updateLivesHud(
         lives: number,
-        maxLives: number,
     ): void {
-
-        const full =
-            '♥'.repeat(lives)
-
-        const empty =
-            '♡'.repeat(
-                Math.max(
-                    0,
-                    maxLives - lives,
-                ),
+        this.coracoes.forEach((coracao, indice) => {
+            coracao.setTexture(
+                indice < lives
+                    ? 'coracao-cheio'
+                    : 'coracao-vazio',
             )
-
-        this.livesText
-            .setText(
-                `Vidas: ${full}${empty}`,
-            )
+        })
     }
 
     private updatePickupRadiusDebug():
@@ -1788,4 +2289,42 @@ export class GameScene
             )
     }
 
+}
+
+function criarTexturasCoracao(
+    cena: Phaser.Scene,
+): void {
+    const variantes = [
+        { chave: 'coracao-cheio', cores: { o: '#2a0f0a', r: '#e2453a', R: '#e2453a', w: '#ffb3a8' } },
+        { chave: 'coracao-vazio', cores: { o: '#2a0f0a', r: '#4a3329', R: '#4a3329', w: '#4a3329' } },
+    ] as const
+
+    for (const { chave, cores } of variantes) {
+        if (cena.textures.exists(chave)) {
+            continue
+        }
+
+        const largura = CORACAO[0].length * PIXEL_CORACAO
+        const altura = CORACAO.length * PIXEL_CORACAO
+        const textura =
+            cena.textures.createCanvas(chave, largura, altura)!
+        const ctx = textura.getContext()
+
+        CORACAO.forEach((linha, y) => {
+            ;[...linha].forEach((pixel, x) => {
+                if (pixel === '.') {
+                    return
+                }
+                ctx.fillStyle = cores[pixel as keyof typeof cores]
+                ctx.fillRect(
+                    x * PIXEL_CORACAO,
+                    y * PIXEL_CORACAO,
+                    PIXEL_CORACAO,
+                    PIXEL_CORACAO,
+                )
+            })
+        })
+
+        textura.refresh()
+    }
 }
