@@ -84,6 +84,7 @@ import type {
 import {
     PUZZLE_EVENTS,
     PuzzleCloseReason,
+    PuzzleEstado,
 } from '../system/Puzzle/Puzzle.types'
 
 import type {
@@ -162,9 +163,11 @@ const PORTAS: readonly PuzzleDoorDefinition[] = [
         largura: 32,
         altura: 20,
         condicao: { tipo: 'puzzle', puzzleId: 'sala-aula-1' },
-        mensagemAbrir: 'A sala de aula 1 foi destrancada.',
+        mensagemAbrir: 'A sala de aula 1 e a biblioteca foram destrancadas!',
     },
-]
+    ]
+
+const PORTA_BIBLIOTECA_ID = 'porta-biblioteca'
 
 const TEST_ITEMS:
     readonly ItemDefinition[] = [
@@ -240,47 +243,47 @@ const ITENS_DOS_PUZZLES: readonly {
 }[] = [
     {
         item: {
-            id: 'number-three',
-            name: 'Número 3',
+            id: 'biblioteca-numero-3',
+            name: 'Página 3',
             description:
-                'Um três de metal. Parece ter saído de uma porta de armário.',
+                'Página 3 arrancada de um livro marcado da biblioteca.',
             textureKey:
                 'sprite-numero-3',
             kind: ItemKind.Number,
             value: 3,
         },
-        x: 160,
-        y: 500,
+        x: 516,
+        y: 324,
         cor: 0xff7675,
     },
     {
         item: {
-            id: 'number-eight',
-            name: 'Número 8',
+            id: 'biblioteca-numero-8',
+            name: 'Página 8',
             description:
-                'Um oito de metal, caído perto da entrada.',
+                'Página 8 antiga com anotações e número destacado.',
             textureKey:
                 'sprite-numero-8',
             kind: ItemKind.Number,
             value: 8,
         },
-        x: 378,
-        y: 600,
+        x: 596,
+        y: 324,
         cor: 0x74b9ff,
     },
     {
         item: {
-            id: 'number-one',
-            name: 'Número 1',
+            id: 'biblioteca-numero-1',
+            name: 'Página 1',
             description:
-                'Um um de metal, esquecido entre as mesas.',
+                'Página 1 marcada com o primeiro dígito do código.',
             textureKey:
                 'sprite-numero-1',
             kind: ItemKind.Number,
             value: 1,
         },
-        x: 520,
-        y: 450,
+        x: 596,
+        y: 372,
         cor: 0xffeaa7,
     },
     {
@@ -1003,7 +1006,30 @@ export class GameScene
                 'teste',
             )
 
+        // GATILHOS DA BIBLIOTECA
+        this.puzzles
+            .adicionarGatilho(
+                548,
+                356,
+                'biblioteca-pista',
+            )
+
+        this.puzzles
+            .adicionarGatilho(
+                644,
+                356,
+                'biblioteca-senha',
+            )
+
+        this.puzzles
+            .adicionarGatilho(
+                692,
+                340,
+                'diretor',
+            )
+
         this.criarPortas()
+
 
         // PUZZLE DENTRO DA SALA 2 (LIBERA A PORTA DA COZINHA)
         this.puzzles
@@ -1012,6 +1038,7 @@ export class GameScene
                 338,
                 'sala-aula-2',
             )
+
         // SISTEMA DE COMIDA
         this.foodThrow =
             new FoodThrowSystem(
@@ -1316,7 +1343,7 @@ export class GameScene
 
         this.doorSystem.update()
 
-        // E = INTERAÇÃO (PORTA -> GATILHO PUZZLE -> COLETA ITEM)
+        // E = INTERAÇÃO (COLETA ITEM SE FOCADO -> PORTA -> GATILHO PUZZLE)
         if (
             Phaser.Input.Keyboard
                 .JustDown(
@@ -1325,21 +1352,17 @@ export class GameScene
             !puzzleAberto
         ) {
             if (
+                this.collision.pickups
+                    .getFocused()
+            ) {
+                this.collision
+                    .tryCollect()
+            } else if (
                 !this.doorSystem
                     .interagir()
             ) {
-                if (
-                    !this.puzzles
-                        .interagir()
-                ) {
-                    if (
-                        this.collision.pickups
-                            .getFocused()
-                    ) {
-                        this.collision
-                            .tryCollect()
-                    }
-                }
+                this.puzzles
+                    .interagir()
             }
         }
 
@@ -1692,6 +1715,27 @@ export class GameScene
                     )
             },
         )
+
+        // PORTA DA BIBLIOTECA: só destranca depois do puzzle da sala 1.
+        // Usa callback (e não puzzleId) porque o puzzle da sala 1 já
+        // está vinculado à porta da própria sala 1.
+        this.doorSystem
+            .adicionarPorta({
+                id: PORTA_BIBLIOTECA_ID,
+                x: 564,
+                y: 412,
+                largura: 32,
+                altura: 20,
+                condicao: {
+                    tipo: 'callback',
+                    fn: () =>
+                        this.puzzles
+                            .estado('sala-aula-1') ===
+                        PuzzleEstado.Resolvido,
+                },
+                mensagemTrancada: 'Biblioteca trancada',
+                mensagemAbrir: 'A biblioteca foi destrancada.',
+            })
     }
 
     private abrirPorta(
@@ -2002,6 +2046,19 @@ export class GameScene
             (
                 puzzleId: PuzzleId,
             ) => {
+                // SALA 1 RESOLVIDA -> DESTRANCA TAMBÉM A BIBLIOTECA
+                if (puzzleId === 'sala-aula-1') {
+                    const portaBiblioteca =
+                        this.doorSystem
+                            .getPorta(
+                                PORTA_BIBLIOTECA_ID,
+                            )
+
+                    if (portaBiblioteca?.isLocked) {
+                        portaBiblioteca.unlock()
+                    }
+                }
+
                 if (
                     this.abrirPorta(
                         puzzleId,
@@ -2010,8 +2067,29 @@ export class GameScene
                     return
                 }
 
+                if (puzzleId === 'biblioteca-pista') {
+                    this.mostrarStatus(
+                        'Pista anotada! Páginas marcadas: 3, 8 e 1. Use o código no armário.',
+                    )
+                    return
+                }
+
+                if (puzzleId === 'diretor') {
+                    this.mostrarStatus(
+                        'Documento lido: Você descobriu os acontecimentos do incidente!',
+                    )
+                    return
+                }
+
+                if (puzzleId === 'biblioteca-senha') {
+                    this.mostrarStatus(
+                        'Armário destrancado! Você encontrou os documentos confidenciais do Diretor.',
+                    )
+                    return
+                }
+
                 this.mostrarStatus(
-                        'Puzzle resolvido!',
+                    'Puzzle resolvido!',
                     )
             },
         )

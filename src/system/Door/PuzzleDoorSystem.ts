@@ -13,21 +13,11 @@ const DICA_TRANCADA = 'Trancada'
 const DICA_INTERAGIR = '[E] Abrir'
 const DICA_ABERTA = 'Aberta'
 
-/**
- * Sistema que gerencia todas as portas de puzzle da cena.
- *
- * Responsabilidades:
- * - Registrar e armazenar as portas (`PuzzleDoor`)
- * - Verificar proximidade do jogador e mostrar dicas
- * - Escutar input de interação
- * - Integrar automaticamente com o `PuzzleSystem`:
- *   portas com condição `{ tipo: 'puzzle' }` são destrancadas
- *   quando o respectivo puzzle é resolvido.
- */
 export class PuzzleDoorSystem extends Phaser.Events.EventEmitter {
   private readonly portas: PuzzleDoor[] = []
   private readonly colliders = new Map<PuzzleDoor, Phaser.Physics.Arcade.Collider>()
-  private readonly puzzleMap = new Map<PuzzleId, PuzzleDoor>()
+  // Suporta múltiplas portas associadas ao mesmo puzzleId
+  private readonly puzzleMap = new Map<PuzzleId, PuzzleDoor[]>()
 
   private focada: PuzzleDoor | null = null
   private readonly raio: number
@@ -49,35 +39,24 @@ export class PuzzleDoorSystem extends Phaser.Events.EventEmitter {
     }
   }
 
-  // =========================================================================
-  // Registro de portas
-  // =========================================================================
-
-  /**
-   * Cria e registra uma porta a partir de uma definição declarativa.
-   * Automaticamente cria o collider com o jogador e configura o
-   * mapeamento puzzle→porta se a condição for do tipo `puzzle`.
-   */
   adicionarPorta(def: PuzzleDoorDefinition): PuzzleDoor {
     const porta = new PuzzleDoor(this.scene, def)
     this.portas.push(porta)
 
-    // Collider com o jogador
     const collider = porta.bindCollider(this.jogador)
     this.colliders.set(porta, collider)
 
-    // Mapear puzzle → porta
     if (def.condicao.tipo === 'puzzle') {
-      this.puzzleMap.set(def.condicao.puzzleId, porta)
+      const lista = this.puzzleMap.get(def.condicao.puzzleId) ?? []
+      lista.push(porta)
+      this.puzzleMap.set(def.condicao.puzzleId, lista)
     }
 
-    // Re-emitir eventos da porta no nível do sistema
     porta.on(DOOR_EVENTS.UNLOCKED, (p: PuzzleDoor) => this.emit(DOOR_EVENTS.UNLOCKED, p))
     porta.on(DOOR_EVENTS.OPENED, (p: PuzzleDoor) => this.emit(DOOR_EVENTS.OPENED, p))
     porta.on(DOOR_EVENTS.CLOSED, (p: PuzzleDoor) => this.emit(DOOR_EVENTS.CLOSED, p))
     porta.on(DOOR_EVENTS.LOCKED_FEEDBACK, (p: PuzzleDoor) => this.emit(DOOR_EVENTS.LOCKED_FEEDBACK, p))
 
-    // Quando a porta abre, destroi o collider (o jogador pode passar)
     porta.on(DOOR_EVENTS.OPENED, () => {
       const c = this.colliders.get(porta)
       if (c) {
@@ -86,7 +65,6 @@ export class PuzzleDoorSystem extends Phaser.Events.EventEmitter {
       }
     })
 
-    // Quando a porta fecha, recria o collider
     porta.on(DOOR_EVENTS.CLOSED, () => {
       if (!this.colliders.has(porta)) {
         const novoCollider = porta.bindCollider(this.jogador)
@@ -97,38 +75,27 @@ export class PuzzleDoorSystem extends Phaser.Events.EventEmitter {
     return porta
   }
 
-  // =========================================================================
-  // Integração com PuzzleSystem
-  // =========================================================================
-
-  /**
-   * Conecta este sistema ao `PuzzleSystem` para que portas com condição
-   * `{ tipo: 'puzzle', puzzleId }` sejam automaticamente destrancadas
-   * quando o puzzle correspondente for resolvido.
-   */
   vincularPuzzleSystem(puzzleSystem: PuzzleSystem): void {
     this.puzzleSystem = puzzleSystem
     puzzleSystem.on(PUZZLE_EVENTS.SOLVED, (puzzleId: PuzzleId) => {
-      const porta = this.puzzleMap.get(puzzleId)
-      if (porta && porta.isLocked) {
-        porta.unlock()
+      const portas = this.puzzleMap.get(puzzleId)
+      if (portas) {
+        portas.forEach((porta) => {
+          if (porta.isLocked) {
+            porta.unlock()
+          }
+        })
       }
     })
   }
-
-  // =========================================================================
-  // Update (chamado todo frame)
-  // =========================================================================
 
   update(): void {
     const proxima = this.puzzleSystem?.aberto ? null : this.portaMaisProxima()
 
     if (proxima === this.focada) return
 
-    // Limpa dica anterior
     this.focada?.mostrarDica(null)
 
-    // Mostra dica na porta próxima
     if (proxima) {
       if (proxima.isOpen) {
         proxima.mostrarDica(DICA_ABERTA)
@@ -151,25 +118,15 @@ export class PuzzleDoorSystem extends Phaser.Events.EventEmitter {
     this.focada = proxima
   }
 
-  // =========================================================================
-  // Interação (chamada quando o jogador aperta "E")
-  // =========================================================================
-
-  /**
-   * Tenta interagir com a porta mais próxima.
-   * Retorna `true` se houve interação (mesmo que a porta esteja trancada).
-   */
   interagir(): boolean {
     if (!this.focada) return false
+    if (this.focada.isOpen && !this.focada.def.podeFechar) {
+      return false
+    }
     this.focada.interact(this.inventario, this.puzzleSystem)
     return true
   }
 
-  // =========================================================================
-  // Consultas
-  // =========================================================================
-
-  /** Retorna a porta mais próxima do jogador dentro do raio de interação. */
   private portaMaisProxima(): PuzzleDoor | null {
     const { x, y } = this.jogador
     let melhor: PuzzleDoor | null = null
@@ -192,19 +149,13 @@ export class PuzzleDoorSystem extends Phaser.Events.EventEmitter {
     return melhor
   }
 
-  /** Busca uma porta pelo seu id. */
   getPorta(id: string): PuzzleDoor | undefined {
     return this.portas.find((p) => p.id === id)
   }
 
-  /** Busca a porta vinculada a um puzzleId. */
   getPortaPorPuzzle(puzzleId: PuzzleId): PuzzleDoor | undefined {
-    return this.puzzleMap.get(puzzleId)
+    return this.puzzleMap.get(puzzleId)?.[0]
   }
-
-  // =========================================================================
-  // Cleanup
-  // =========================================================================
 
   destroy(): void {
     this.colliders.forEach((c) => c.destroy())
@@ -216,4 +167,3 @@ export class PuzzleDoorSystem extends Phaser.Events.EventEmitter {
     this.removeAllListeners()
   }
 }
-
