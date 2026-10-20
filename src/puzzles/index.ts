@@ -4,7 +4,6 @@ export type PuzzleId =
   | 'teste'
   | 'entrada-cozinha'
   | 'refeitorio'
-  | 'cozinha'
   | 'sala-aula-1'
   | 'sala-aula-2'
   | 'biblioteca-pista'
@@ -43,14 +42,6 @@ export const PUZZLES: Record<PuzzleId, PuzzleDefinicao> = {
     slots: [{ resposta: 1 }, { resposta: 3 }],
   },
 
-  cozinha: {
-    tipo: 'slots',
-    titulo: 'Cozinha',
-    requisitos: ['refeitorio'],
-    enunciado: 'x + 15 = 32',
-    slots: [{ rotulo: 'x =', resposta: 17 }],
-  },
-
   'sala-aula-1': {
     tipo: 'slots',
     titulo: 'Sala de aula 1',
@@ -79,14 +70,14 @@ export const PUZZLES: Record<PuzzleId, PuzzleDefinicao> = {
   'biblioteca-pista': {
     tipo: 'nota',
     titulo: 'Anotação da biblioteca',
-    requisitos: ['cozinha'],
+    requisitos: ['sala-aula-1'],
     texto: 'Os números das páginas marcadas são 3, 8 e 1. Use-os na ordem em que foram encontrados para formar o código do armário.',
   },
 
   'biblioteca-senha': {
     tipo: 'slots',
     titulo: 'Armário da biblioteca',
-    requisitos: ['biblioteca-pista', 'sala-aula-1'],
+    requisitos: ['biblioteca-pista'],
     enunciado: 'Coloque o código das páginas marcadas.',
     slots: [
       { rotulo: '1º:', resposta: 3 },
