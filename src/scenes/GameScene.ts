@@ -164,6 +164,15 @@ const PORTAS: readonly PuzzleDoorDefinition[] = [
         condicao: { tipo: 'puzzle', puzzleId: 'sala-aula-1' },
         mensagemAbrir: 'A sala de aula 1 foi destrancada.',
     },
+    {
+        id: 'porta-biblioteca',
+        x: 196,
+        y: 412,
+        largura: 32,
+        altura: 20,
+        condicao: { tipo: 'puzzle', puzzleId: 'cozinha' },
+        mensagemAbrir: 'A biblioteca foi destrancada.',
+    },
 ]
 
 const TEST_ITEMS:
@@ -240,47 +249,47 @@ const ITENS_DOS_PUZZLES: readonly {
 }[] = [
     {
         item: {
-            id: 'number-three',
-            name: 'Número 3',
+            id: 'biblioteca-numero-3',
+            name: 'Página 3',
             description:
-                'Um três de metal. Parece ter saído de uma porta de armário.',
+                'Página 3 arrancada de um livro marcado da biblioteca.',
             textureKey:
-                'item-numero-3',
+                'item-biblioteca-3',
             kind: ItemKind.Number,
             value: 3,
         },
-        x: 160,
-        y: 500,
+        x: 170,
+        y: 440,
         cor: 0xff7675,
     },
     {
         item: {
-            id: 'number-eight',
-            name: 'Número 8',
+            id: 'biblioteca-numero-8',
+            name: 'Página 8',
             description:
-                'Um oito de metal, caído perto da entrada.',
+                'Página 8 antiga com anotações e número destacado.',
             textureKey:
-                'item-numero-8',
+                'item-biblioteca-8',
             kind: ItemKind.Number,
             value: 8,
         },
-        x: 378,
-        y: 600,
+        x: 230,
+        y: 450,
         cor: 0x74b9ff,
     },
     {
         item: {
-            id: 'number-one',
-            name: 'Número 1',
+            id: 'biblioteca-numero-1',
+            name: 'Página 1',
             description:
-                'Um um de metal, esquecido entre as mesas.',
+                'Página 1 marcada com o primeiro dígito do código.',
             textureKey:
-                'item-numero-1',
+                'item-biblioteca-1',
             kind: ItemKind.Number,
             value: 1,
         },
-        x: 520,
-        y: 450,
+        x: 320,
+        y: 440,
         cor: 0xffeaa7,
     },
     {
@@ -372,6 +381,21 @@ const ITENS_DOS_PUZZLES: readonly {
         x: 468,
         y: 392,
         cor: 0xfdcb6e,
+    },
+    {
+        item: {
+            id: 'cozinha-numero-17',
+            name: 'Número 17',
+            description:
+                'Um 17 gravado no fundo de uma panela.',
+            textureKey:
+                'item-cozinha-17',
+            kind: ItemKind.Number,
+            value: 17,
+        },
+        x: 230,
+        y: 490,
+        cor: 0xe67e22,
     },
 ]
 
@@ -990,6 +1014,28 @@ export class GameScene
                 'teste',
             )
 
+        // GATILHOS DA BIBLIOTECA
+        this.puzzles
+            .adicionarGatilho(
+                220,
+                380,
+                'biblioteca-pista',
+            )
+
+        this.puzzles
+            .adicionarGatilho(
+                170,
+                380,
+                'biblioteca-senha',
+            )
+
+        this.puzzles
+            .adicionarGatilho(
+                170,
+                340,
+                'diretor',
+            )
+
         this.criarPortas()
 
         // PUZZLE DENTRO DA SALA 2 (LIBERA A PORTA DA COZINHA)
@@ -998,6 +1044,14 @@ export class GameScene
                 420,
                 338,
                 'sala-aula-2',
+            )
+
+        // PUZZLE DENTRO DA COZINHA (LIBERA A BIBLIOTECA)
+        this.puzzles
+            .adicionarGatilho(
+                210,
+                482,
+                'cozinha',
             )
         // SISTEMA DE COMIDA
         this.foodThrow =
@@ -1303,7 +1357,7 @@ export class GameScene
 
         this.doorSystem.update()
 
-        // E = INTERAÇÃO (PORTA -> GATILHO PUZZLE -> COLETA ITEM)
+        // E = INTERAÇÃO (COLETA ITEM SE FOCADO -> PORTA -> GATILHO PUZZLE)
         if (
             Phaser.Input.Keyboard
                 .JustDown(
@@ -1312,21 +1366,17 @@ export class GameScene
             !puzzleAberto
         ) {
             if (
+                this.collision.pickups
+                    .getFocused()
+            ) {
+                this.collision
+                    .tryCollect()
+            } else if (
                 !this.doorSystem
                     .interagir()
             ) {
-                if (
-                    !this.puzzles
-                        .interagir()
-                ) {
-                    if (
-                        this.collision.pickups
-                            .getFocused()
-                    ) {
-                        this.collision
-                            .tryCollect()
-                    }
-                }
+                this.puzzles
+                    .interagir()
             }
         }
 
@@ -1995,8 +2045,22 @@ export class GameScene
                     return
                 }
 
+                if (puzzleId === 'biblioteca-pista') {
+                    this.mostrarStatus(
+                        'Pista anotada! Páginas marcadas: 3, 8 e 1. Use o código no armário.',
+                    )
+                    return
+                }
+
+                if (puzzleId === 'biblioteca-senha') {
+                    this.mostrarStatus(
+                        'Armário destrancado! Você encontrou os documentos confidenciais do Diretor.',
+                    )
+                    return
+                }
+
                 this.mostrarStatus(
-                        'Puzzle resolvido!',
+                    'Puzzle resolvido!',
                     )
             },
         )

@@ -79,7 +79,7 @@ export const PUZZLES: Record<PuzzleId, PuzzleDefinicao> = {
   'biblioteca-pista': {
     tipo: 'nota',
     titulo: 'Anotação da biblioteca',
-    requisitos: ['sala-aula-2'],
+    requisitos: ['cozinha'],
     texto: 'Os números das páginas marcadas são 3, 8 e 1. Use-os na ordem em que foram encontrados para formar o código do armário.',
   },
 
@@ -88,7 +88,11 @@ export const PUZZLES: Record<PuzzleId, PuzzleDefinicao> = {
     titulo: 'Armário da biblioteca',
     requisitos: ['biblioteca-pista'],
     enunciado: 'Coloque o código das páginas marcadas.',
-    slots: [{ resposta: 3 }, { resposta: 8 }, { resposta: 1 }],
+    slots: [
+      { rotulo: '1º:', resposta: 3 },
+      { rotulo: '2º:', resposta: 8 },
+      { rotulo: '3º:', resposta: 1 },
+    ],
   },
 
   diretor: {
