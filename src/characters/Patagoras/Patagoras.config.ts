@@ -1,6 +1,19 @@
+export const PATAGORAS_SPEED_MULTIPLIERS = [
+    1.0,
+    1.1,
+    1.25,
+    1.5,
+] as const
+
 export const PATAGORAS_CONFIG = {
-    speed: 45,
-    chaseSpeed: 60,
+    scale: 1,
+    bodyWidth: 10,
+    bodyHeight: 8,
+    bodyOffsetX: 5,
+    bodyOffsetY: 11,
+    speed: 22.5,
+    chaseSpeed: 30,
+    errorSpeedMultipliers: PATAGORAS_SPEED_MULTIPLIERS,
     detectionRadius: 200,
     loseTargetRadius: 350,
     searchDurationMs: 5000,
@@ -12,6 +25,6 @@ export const PATAGORAS_CONFIG = {
     hitCooldownMs: 1000,
     hitRecoveryMs: 5000,
     pathRecalculateMs: 250,
-    waypointReachDistance: 8,
-    pathfindingPadding: 6,
+    waypointReachDistance: 4,
+    pathfindingPadding: 0,
 } as const

@@ -5,6 +5,11 @@ import type {
 } from '../../Collision/CollisionSystem'
 
 import {
+    clipDistanceToObstacles,
+    hasLineOfSight,
+} from '../../Collision/LineOfSight'
+
+import {
     ItemKind,
 } from '../Inventory.types'
 
@@ -150,21 +155,37 @@ export class FoodThrowSystem
             this.player.body?.center.y ??
             this.player.y
 
+        const patagorasX =
+            this.patagoras.getBodyCenterX()
+
+        const patagorasY =
+            this.patagoras.getBodyCenterY()
+
         const direction =
             new Phaser.Math.Vector2(
-                this.patagoras.sprite.x -
+                patagorasX -
                 startX,
 
-                this.patagoras.sprite.y -
+                patagorasY -
                 startY,
             )
 
         const distanceToPatagoras =
             direction.length()
 
+        const obstacles =
+            this.collision.getObstacles()
+
         const patagorasWasInRange =
             distanceToPatagoras <=
-            FOOD_THROW_CONFIG.maxRange
+            FOOD_THROW_CONFIG.maxRange &&
+            hasLineOfSight(
+                startX,
+                startY,
+                patagorasX,
+                patagorasY,
+                obstacles,
+            )
 
         // Caso estejam exatamente na mesma
         // posição, consideramos que acertou.
@@ -179,9 +200,16 @@ export class FoodThrowSystem
         direction.normalize()
 
         const throwDistance =
-            Math.min(
-                distanceToPatagoras,
-                FOOD_THROW_CONFIG.maxRange,
+            clipDistanceToObstacles(
+                startX,
+                startY,
+                direction.x,
+                direction.y,
+                Math.min(
+                    distanceToPatagoras,
+                    FOOD_THROW_CONFIG.maxRange,
+                ),
+                obstacles,
             )
 
         const worldBounds =
@@ -312,10 +340,10 @@ export class FoodThrowSystem
     ): void {
 
         const x =
-            this.patagoras.sprite.x
+            this.patagoras.getBodyCenterX()
 
         const y =
-            this.patagoras.sprite.y
+            this.patagoras.getBodyCenterY()
 
         this.clearFlight()
 

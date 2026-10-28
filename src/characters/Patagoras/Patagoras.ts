@@ -17,6 +17,10 @@ export class Patagoras {
         PatagorasState =
         PatagorasState.Idle
 
+    private errorCount = 0
+
+    private speedMultiplier = 1
+
     constructor(
         scene: Phaser.Scene,
         x: number,
@@ -30,11 +34,18 @@ export class Patagoras {
             )
 
         this.sprite
+            .setScale(PATAGORAS_CONFIG.scale)
             .setDepth(5)
 
         this.sprite
-            .setSize(14, 14)
-            .setOffset(3, 4)
+            .setSize(
+                PATAGORAS_CONFIG.bodyWidth,
+                PATAGORAS_CONFIG.bodyHeight,
+            )
+            .setOffset(
+                PATAGORAS_CONFIG.bodyOffsetX,
+                PATAGORAS_CONFIG.bodyOffsetY,
+            )
 
         this.sprite
             .setCollideWorldBounds(
@@ -60,18 +71,70 @@ export class Patagoras {
             state
     }
 
+    public getBodyCenterX(): number {
+        return this.sprite.body
+            ? this.sprite.body.center.x
+            : this.sprite.x
+    }
+
+    public getBodyCenterY(): number {
+        return this.sprite.body
+            ? this.sprite.body.center.y
+            : this.sprite.y
+    }
+
+    public setErrorCount(
+        errors: number,
+    ): void {
+        const normalized =
+            Math.max(0, Math.floor(errors))
+        const multipliers =
+            PATAGORAS_CONFIG.errorSpeedMultipliers
+        const index =
+            Math.min(
+                normalized,
+                multipliers.length - 1,
+            )
+
+        this.errorCount = normalized
+        this.speedMultiplier =
+            multipliers[index]
+    }
+
+    public getErrorCount(): number {
+        return this.errorCount
+    }
+
+    public getSpeedMultiplier(): number {
+        return this.speedMultiplier
+    }
+
+    public getSpeed(): number {
+        return (
+            PATAGORAS_CONFIG.speed *
+            this.speedMultiplier
+        )
+    }
+
+    public getChaseSpeed(): number {
+        return (
+            PATAGORAS_CONFIG.chaseSpeed *
+            this.speedMultiplier
+        )
+    }
+
     public moveTowards(
         x: number,
         y: number,
         speed:
             number =
-            PATAGORAS_CONFIG.speed,
+            this.getSpeed(),
     ): void {
 
         const direction =
             new Phaser.Math.Vector2(
-                x - this.sprite.x,
-                y - this.sprite.y,
+                x - this.getBodyCenterX(),
+                y - this.getBodyCenterY(),
             )
 
         if (
@@ -116,13 +179,16 @@ export class Patagoras {
             direction.normalize()
         }
 
+        const currentSpeed =
+            this.getSpeed()
+
         this.sprite
             .setVelocity(
                 direction.x *
-                PATAGORAS_CONFIG.speed,
+                currentSpeed,
 
                 direction.y *
-                PATAGORAS_CONFIG.speed,
+                currentSpeed,
             )
     }
 

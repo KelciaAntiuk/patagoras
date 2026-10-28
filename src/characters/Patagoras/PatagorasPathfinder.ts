@@ -21,17 +21,34 @@ export class PatagorasPathfinder {
     private readonly blocked =
         new Set<string>()
 
+    private readonly dynamicObstacles =
+        new Map<string, Set<string>>()
+
     private readonly columns: number
 
     private readonly rows: number
+
+    private readonly gridOffsetX: number
+
+    private readonly gridOffsetY: number
 
     constructor(
         worldWidth: number,
         worldHeight: number,
         private readonly cellSize: number,
         wallRects: readonly WorldRect[],
-        obstaclePadding = 6,
+        obstaclePadding = 0,
     ) {
+        const firstRect = wallRects[0]
+
+        this.gridOffsetX = firstRect
+            ? ((firstRect.x % cellSize) + cellSize) % cellSize
+            : 0
+
+        this.gridOffsetY = firstRect
+            ? ((firstRect.y % cellSize) + cellSize) % cellSize
+            : 0
+
         this.columns = Math.ceil(
             worldWidth / cellSize,
         )
@@ -44,6 +61,49 @@ export class PatagorasPathfinder {
             wallRects,
             obstaclePadding,
         )
+    }
+
+    public setDynamicObstacle(
+        id: string,
+        rect: WorldRect,
+        blocked: boolean,
+    ): void {
+        if (!blocked) {
+            this.dynamicObstacles.delete(id)
+            return
+        }
+
+        const cells = new Set<string>()
+
+        const left = Math.floor(
+            (rect.x - this.gridOffsetX) /
+            this.cellSize,
+        )
+
+        const right = Math.floor(
+            (rect.x + rect.width - 1 - this.gridOffsetX) /
+            this.cellSize,
+        )
+
+        const top = Math.floor(
+            (rect.y - this.gridOffsetY) /
+            this.cellSize,
+        )
+
+        const bottom = Math.floor(
+            (rect.y + rect.height - 1 - this.gridOffsetY) /
+            this.cellSize,
+        )
+
+        for (let gridY = top; gridY <= bottom; gridY++) {
+            for (let gridX = left; gridX <= right; gridX++) {
+                if (this.isInsideGrid(gridX, gridY)) {
+                    cells.add(this.key(gridX, gridY))
+                }
+            }
+        }
+
+        this.dynamicObstacles.set(id, cells)
     }
 
     public findPath(
@@ -130,6 +190,8 @@ export class PatagorasPathfinder {
             ) {
                 return this.reconstructPath(
                     current,
+                    startX,
+                    startY,
                 )
             }
 
@@ -200,7 +262,7 @@ export class PatagorasPathfinder {
 
             const left =
                 Math.floor(
-                    (rect.x - padding) /
+                    (rect.x - padding - this.gridOffsetX) /
                     this.cellSize,
                 )
 
@@ -209,14 +271,15 @@ export class PatagorasPathfinder {
                     (
                         rect.x +
                         rect.width +
-                        padding - 1
+                        padding - 1 -
+                        this.gridOffsetX
                     ) /
                     this.cellSize,
                 )
 
             const top =
                 Math.floor(
-                    (rect.y - padding) /
+                    (rect.y - padding - this.gridOffsetY) /
                     this.cellSize,
                 )
 
@@ -225,7 +288,8 @@ export class PatagorasPathfinder {
                     (
                         rect.y +
                         rect.height +
-                        padding - 1
+                        padding - 1 -
+                        this.gridOffsetY
                     ) /
                     this.cellSize,
                 )
@@ -260,6 +324,8 @@ export class PatagorasPathfinder {
 
     private reconstructPath(
         endNode: Node,
+        startWorldX?: number,
+        startWorldY?: number,
     ): Phaser.Math.Vector2[] {
 
         const cells: GridPoint[] = []
@@ -284,10 +350,68 @@ export class PatagorasPathfinder {
                 cells,
             )
 
-        // Remove a célula inicial, pois o pato
-        // já está nela.
         if (simplified.length > 1) {
-            simplified.shift()
+            const firstCenter =
+                this.gridToWorld(
+                    simplified[0].x,
+                    simplified[0].y,
+                )
+
+            const secondCenter =
+                this.gridToWorld(
+                    simplified[1].x,
+                    simplified[1].y,
+                )
+
+            if (
+                startWorldX !== undefined &&
+                startWorldY !== undefined
+            ) {
+                const distToFirst =
+                    Phaser.Math.Distance.Between(
+                        startWorldX,
+                        startWorldY,
+                        firstCenter.x,
+                        firstCenter.y,
+                    )
+
+                const segDx =
+                    secondCenter.x -
+                    firstCenter.x
+
+                const segDy =
+                    secondCenter.y -
+                    firstCenter.y
+
+                const crossDist =
+                    segDx !== 0
+                        ? Math.abs(
+                            startWorldY -
+                            firstCenter.y,
+                        )
+                        : Math.abs(
+                            startWorldX -
+                            firstCenter.x,
+                        )
+
+                const dot =
+                    (startWorldX -
+                        firstCenter.x) *
+                    segDx +
+                    (startWorldY -
+                        firstCenter.y) *
+                    segDy
+
+                if (
+                    distToFirst <= 4 ||
+                    (crossDist <= 3 &&
+                        dot >= 0)
+                ) {
+                    simplified.shift()
+                }
+            } else {
+                simplified.shift()
+            }
         }
 
         return simplified.map(
@@ -467,12 +591,18 @@ export class PatagorasPathfinder {
     ): GridPoint {
         return {
             x: Phaser.Math.Clamp(
-                Math.floor(x / this.cellSize),
+                Math.floor(
+                    (x - this.gridOffsetX) /
+                    this.cellSize,
+                ),
                 0,
                 this.columns - 1,
             ),
             y: Phaser.Math.Clamp(
-                Math.floor(y / this.cellSize),
+                Math.floor(
+                    (y - this.gridOffsetY) /
+                    this.cellSize,
+                ),
                 0,
                 this.rows - 1,
             ),
@@ -484,8 +614,10 @@ export class PatagorasPathfinder {
         y: number,
     ): Phaser.Math.Vector2 {
         return new Phaser.Math.Vector2(
+            this.gridOffsetX +
             x * this.cellSize +
             this.cellSize / 2,
+            this.gridOffsetY +
             y * this.cellSize +
             this.cellSize / 2,
         )
@@ -495,9 +627,19 @@ export class PatagorasPathfinder {
         x: number,
         y: number,
     ): boolean {
-        return this.blocked.has(
-            this.key(x, y),
-        )
+        const cellKey = this.key(x, y)
+
+        if (this.blocked.has(cellKey)) {
+            return true
+        }
+
+        for (const cells of this.dynamicObstacles.values()) {
+            if (cells.has(cellKey)) {
+                return true
+            }
+        }
+
+        return false
     }
 
     private isInsideGrid(

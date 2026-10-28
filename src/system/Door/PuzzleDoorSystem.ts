@@ -1,5 +1,8 @@
 import Phaser from 'phaser'
+import { PLAYER_CONFIG } from '../../characters/Player/Player.config'
 import type { PuzzleId } from '../../puzzles'
+import type { WorldRect } from '../Collision/Collision.types'
+import { getActorCenter, hasLineOfSight } from '../Collision/LineOfSight'
 import type { InventorySystem } from '../Inventory/InventorySystem'
 import { PUZZLE_EVENTS, PuzzleEstado } from '../Puzzle/Puzzle.types'
 import type { PuzzleSystem } from '../Puzzle/PuzzleSystem'
@@ -7,7 +10,7 @@ import { PuzzleDoor } from './PuzzleDoor'
 import { DOOR_EVENTS } from './PuzzleDoor.types'
 import type { PuzzleDoorDefinition, PuzzleDoorSystemConfig } from './PuzzleDoor.types'
 
-const RAIO_INTERACAO_PADRAO = 40
+const RAIO_INTERACAO_PADRAO = PLAYER_CONFIG.interactionRadius
 
 const DICA_TRANCADA = 'Trancada'
 const DICA_INTERAGIR = '[E] Abrir'
@@ -15,7 +18,7 @@ const DICA_ABERTA = 'Aberta'
 
 export class PuzzleDoorSystem extends Phaser.Events.EventEmitter {
   private readonly portas: PuzzleDoor[] = []
-  private readonly colliders = new Map<PuzzleDoor, Phaser.Physics.Arcade.Collider>()
+  private readonly colliders = new Map<PuzzleDoor, Phaser.Physics.Arcade.Collider[]>()
   // Suporta múltiplas portas associadas ao mesmo puzzleId
   private readonly puzzleMap = new Map<PuzzleId, PuzzleDoor[]>()
 
@@ -23,7 +26,9 @@ export class PuzzleDoorSystem extends Phaser.Events.EventEmitter {
   private readonly raio: number
 
   private readonly jogador: Phaser.Physics.Arcade.Sprite
+  private readonly atoresColisao: Phaser.Physics.Arcade.Sprite[]
   private readonly inventario: InventorySystem
+  private readonly getObstacles?: () => readonly WorldRect[]
   private puzzleSystem?: PuzzleSystem
 
   constructor(
@@ -32,8 +37,13 @@ export class PuzzleDoorSystem extends Phaser.Events.EventEmitter {
   ) {
     super()
     this.jogador = config.jogador
+    this.atoresColisao = [
+      config.jogador,
+      ...(config.atoresColisao ?? []),
+    ]
     this.inventario = config.inventario
     this.raio = config.raioInteracao ?? RAIO_INTERACAO_PADRAO
+    this.getObstacles = config.getObstacles
     if (config.puzzles) {
       this.vincularPuzzleSystem(config.puzzles)
     }
@@ -43,8 +53,10 @@ export class PuzzleDoorSystem extends Phaser.Events.EventEmitter {
     const porta = new PuzzleDoor(this.scene, def)
     this.portas.push(porta)
 
-    const collider = porta.bindCollider(this.jogador)
-    this.colliders.set(porta, collider)
+    this.colliders.set(
+      porta,
+      this.atoresColisao.map((ator) => porta.bindCollider(ator)),
+    )
 
     if (def.condicao.tipo === 'puzzle') {
       const lista = this.puzzleMap.get(def.condicao.puzzleId) ?? []
@@ -58,17 +70,19 @@ export class PuzzleDoorSystem extends Phaser.Events.EventEmitter {
     porta.on(DOOR_EVENTS.LOCKED_FEEDBACK, (p: PuzzleDoor) => this.emit(DOOR_EVENTS.LOCKED_FEEDBACK, p))
 
     porta.on(DOOR_EVENTS.OPENED, () => {
-      const c = this.colliders.get(porta)
-      if (c) {
-        c.destroy()
+      const lista = this.colliders.get(porta)
+      if (lista) {
+        lista.forEach((c) => c.destroy())
         this.colliders.delete(porta)
       }
     })
 
     porta.on(DOOR_EVENTS.CLOSED, () => {
       if (!this.colliders.has(porta)) {
-        const novoCollider = porta.bindCollider(this.jogador)
-        this.colliders.set(porta, novoCollider)
+        this.colliders.set(
+          porta,
+          this.atoresColisao.map((ator) => porta.bindCollider(ator)),
+        )
       }
     })
 
@@ -87,6 +101,16 @@ export class PuzzleDoorSystem extends Phaser.Events.EventEmitter {
         })
       }
     })
+  }
+
+  getClosedDoorRects(): WorldRect[] {
+    const rects: WorldRect[] = []
+    for (const porta of this.portas) {
+      if (!porta.isOpen) {
+        rects.push(this.getDoorRect(porta))
+      }
+    }
+    return rects
   }
 
   update(): void {
@@ -119,6 +143,7 @@ export class PuzzleDoorSystem extends Phaser.Events.EventEmitter {
   }
 
   interagir(): boolean {
+    this.update()
     if (!this.focada) return false
     if (this.focada.isOpen && !this.focada.def.podeFechar) {
       return false
@@ -127,20 +152,32 @@ export class PuzzleDoorSystem extends Phaser.Events.EventEmitter {
     return true
   }
 
+  private getDoorRect(porta: PuzzleDoor): WorldRect {
+    return {
+      x: porta.def.x - porta.def.largura / 2,
+      y: porta.def.y - porta.def.altura / 2,
+      width: porta.def.largura,
+      height: porta.def.altura,
+    }
+  }
+
   private portaMaisProxima(): PuzzleDoor | null {
-    const { x, y } = this.jogador
+    const { x, y } = getActorCenter(this.jogador)
+    const obstacles = this.getObstacles ? this.getObstacles() : []
     let melhor: PuzzleDoor | null = null
     let melhorDist = this.raio
 
     for (const porta of this.portas) {
-      const bounds = porta.getBounds()
-      const dist = Phaser.Math.Distance.Between(
-        x,
-        y,
-        Phaser.Math.Clamp(x, bounds.left, bounds.right),
-        Phaser.Math.Clamp(y, bounds.top, bounds.bottom),
-      )
-      if (dist <= this.raio && dist < melhorDist) {
+      const doorRect = this.getDoorRect(porta)
+      const targetX = Phaser.Math.Clamp(x, doorRect.x, doorRect.x + doorRect.width)
+      const targetY = Phaser.Math.Clamp(y, doorRect.y, doorRect.y + doorRect.height)
+      const dist = Phaser.Math.Distance.Between(x, y, targetX, targetY)
+
+      if (
+        dist <= this.raio &&
+        dist < melhorDist &&
+        hasLineOfSight(x, y, targetX, targetY, obstacles, doorRect)
+      ) {
         melhor = porta
         melhorDist = dist
       }
@@ -158,7 +195,7 @@ export class PuzzleDoorSystem extends Phaser.Events.EventEmitter {
   }
 
   destroy(): void {
-    this.colliders.forEach((c) => c.destroy())
+    this.colliders.forEach((lista) => lista.forEach((c) => c.destroy()))
     this.colliders.clear()
     this.portas.forEach((p) => p.destroy())
     this.portas.length = 0
