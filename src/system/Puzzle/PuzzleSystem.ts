@@ -1,8 +1,11 @@
 import Phaser from 'phaser'
 import { PATAGORAS_EVENTS } from '../../characters/Patagoras/Patagoras.events'
 import type { PatagorasHit } from '../../characters/Patagoras/PatagorasHit'
+import { PLAYER_CONFIG } from '../../characters/Player/Player.config'
 import { PUZZLES } from '../../puzzles'
 import type { PuzzleId } from '../../puzzles'
+import type { WorldRect } from '../Collision/Collision.types'
+import { getActorCenter, hasLineOfSight } from '../Collision/LineOfSight'
 import type { InventorySystem } from '../Inventory/InventorySystem'
 import { PUZZLE_EVENTS, PuzzleCloseReason, PuzzleEstado } from './Puzzle.types'
 import type { PuzzleFechamento } from './Puzzle.types'
@@ -10,18 +13,20 @@ import { PUZZLE_SCENE_KEY } from './PuzzleScene'
 import type { PuzzleSceneDados } from './PuzzleScene'
 import { PuzzleTrigger } from './PuzzleTrigger'
 
-const RAIO_INTERACAO = 40
+const RAIO_INTERACAO = PLAYER_CONFIG.interactionRadius
 
 export interface PuzzleSystemConfig {
   readonly jogador: Phaser.Physics.Arcade.Sprite
   readonly inventario: InventorySystem
   readonly patagorasHit: PatagorasHit
   readonly raioInteracao?: number
+  readonly getObstacles?: () => readonly WorldRect[]
 }
 
 export class PuzzleSystem extends Phaser.Events.EventEmitter {
   private readonly gatilhos: PuzzleTrigger[] = []
   private readonly resolvidos = new Set<PuzzleId>()
+  private erros = 0
   private focado: PuzzleTrigger | null = null
   private abertoId: PuzzleId | null = null
   private readonly raio: number
@@ -38,6 +43,10 @@ export class PuzzleSystem extends Phaser.Events.EventEmitter {
 
   get aberto(): boolean {
     return this.abertoId !== null
+  }
+
+  get totalErros(): number {
+    return this.erros
   }
 
   estado(id: PuzzleId): PuzzleEstado {
@@ -62,6 +71,7 @@ export class PuzzleSystem extends Phaser.Events.EventEmitter {
   }
 
   interagir(): boolean {
+    this.update()
     if (!this.focado) return false
     return this.abrir(this.focado.puzzleId)
   }
@@ -76,7 +86,7 @@ export class PuzzleSystem extends Phaser.Events.EventEmitter {
       definicao: PUZZLES[puzzleId],
       inventario: this.config.inventario,
       resolver: () => this.resolver(),
-      errar: () => this.emit(PUZZLE_EVENTS.FAILED, puzzleId),
+      errar: () => this.registrarErro(),
       fechar: () => this.fechar(PuzzleCloseReason.Jogador),
     }
     this.scene.scene.launch(PUZZLE_SCENE_KEY, dados)
@@ -111,18 +121,30 @@ export class PuzzleSystem extends Phaser.Events.EventEmitter {
     this.fechar(PuzzleCloseReason.Resolvido)
   }
 
+  private registrarErro(): void {
+    if (!this.abertoId) return
+
+    this.erros += 1
+    this.emit(PUZZLE_EVENTS.FAILED, this.abertoId)
+  }
+
   private aoSerAtacado(): void {
     this.fechar(PuzzleCloseReason.Atacado)
   }
 
   private gatilhoMaisProximo(): PuzzleTrigger | null {
-    const { x, y } = this.config.jogador
+    const { x, y } = getActorCenter(this.config.jogador)
+    const obstacles = this.config.getObstacles ? this.config.getObstacles() : []
     let melhor: PuzzleTrigger | null = null
     let melhorDistancia = this.raio
 
     for (const gatilho of this.gatilhos) {
       const distancia = Phaser.Math.Distance.Between(x, y, gatilho.sprite.x, gatilho.sprite.y)
-      if (distancia <= melhorDistancia) {
+      if (
+        distancia <= this.raio &&
+        distancia < melhorDistancia &&
+        hasLineOfSight(x, y, gatilho.sprite.x, gatilho.sprite.y, obstacles)
+      ) {
         melhor = gatilho
         melhorDistancia = distancia
       }

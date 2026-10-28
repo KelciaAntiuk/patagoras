@@ -1,5 +1,6 @@
 import type Phaser from 'phaser'
 import type { PuzzleId } from '../../puzzles'
+import type { WorldRect } from '../Collision/Collision.types'
 import type { InventorySystem } from '../Inventory/InventorySystem'
 import type { ItemId } from '../Inventory/Inventory.types'
 
@@ -101,8 +102,8 @@ export interface PuzzleDoorSystemConfig {
   readonly inventario: InventorySystem
   readonly puzzles?: import('../Puzzle/PuzzleSystem').PuzzleSystem
   readonly atoresColisao?: readonly Phaser.Physics.Arcade.Sprite[]
+  readonly getObstacles?: () => readonly WorldRect[]
 
-  /** Raio de proximidade para habilitar interação (padrão: 40). */
+  /** Raio de proximidade para habilitar interação (padrão: 24). */
   readonly raioInteracao?: number
 }
-

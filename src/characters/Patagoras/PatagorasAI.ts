@@ -183,8 +183,8 @@ export class PatagorasAI {
             this.followPathTo(
                 playerX,
                 playerY,
-                PATAGORAS_CONFIG
-                    .chaseSpeed,
+                this.patagoras
+                    .getChaseSpeed(),
                 true,
             )
 
@@ -236,8 +236,8 @@ export class PatagorasAI {
                 this.followPathTo(
                     this.lastKnownPlayerPosition.x,
                     this.lastKnownPlayerPosition.y,
-                    PATAGORAS_CONFIG
-                        .chaseSpeed,
+                    this.patagoras
+                        .getChaseSpeed(),
                     false,
                 )
 
@@ -339,7 +339,7 @@ export class PatagorasAI {
             this.followPathTo(
                 this.wanderTarget.x,
                 this.wanderTarget.y,
-                PATAGORAS_CONFIG.speed,
+                this.patagoras.getSpeed(),
                 false,
             )
 

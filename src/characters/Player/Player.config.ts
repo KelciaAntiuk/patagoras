@@ -5,4 +5,5 @@ export const PLAYER_CONFIG = {
     bodyHeight: 8,
     bodyOffsetX: 7,
     bodyOffsetY: 16,
+    interactionRadius: 24,
 } as const

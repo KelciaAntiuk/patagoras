@@ -17,6 +17,10 @@ import type {
     WorldRect,
 } from '../system/Collision/Collision.types'
 
+import {
+    getActorCenter,
+} from '../system/Collision/LineOfSight'
+
 import type {
     Pickup,
 } from '../system/Collision/Pickup'
@@ -133,7 +137,7 @@ const TAMANHO_ESCURIDAO = 800
 const WORLD_WIDTH = 2400
 const WORLD_HEIGHT = 1800
 
-const PICKUP_RADIUS = 90
+const PICKUP_RADIUS = PLAYER_CONFIG.interactionRadius
 
 const SPAWN_JOGADOR_X = 470
 const SPAWN_JOGADOR_Y = 600
@@ -486,6 +490,11 @@ export class GameScene
         Phaser.Tilemaps.Tile[] = []
 
     private debugVisible = false
+
+    private solidObstaclesCache:
+        readonly WorldRect[] = []
+
+    private solidObstaclesDirty = true
 
     private ultimaDirecao:
         | 'frente'
@@ -922,6 +931,9 @@ export class GameScene
 
                     pickupRadius:
                         PICKUP_RADIUS,
+
+                    getObstacles: () =>
+                        this.getSolidObstacles(),
                 },
             )
 
@@ -1008,6 +1020,12 @@ export class GameScene
 
                     patagorasHit:
                         this.patagorasHit,
+
+                    raioInteracao:
+                        PICKUP_RADIUS,
+
+                    getObstacles: () =>
+                        this.getSolidObstacles(),
                 },
             )
 
@@ -1198,6 +1216,9 @@ export class GameScene
 
                 this.patagoras
                     .destroy()
+
+                this.solidObstaclesCache = []
+                this.solidObstaclesDirty = true
             },
         )
 
@@ -1447,6 +1468,24 @@ export class GameScene
                 }
             }
         }
+    }
+
+    private getSolidObstacles(): readonly WorldRect[] {
+        if (!this.doorSystem) {
+            return this.collision.walls.getWallRects()
+        }
+        if (this.solidObstaclesDirty) {
+            const wallRects =
+                this.collision.walls.getWallRects()
+            const closedDoors =
+                this.doorSystem.getClosedDoorRects()
+            this.solidObstaclesCache =
+                closedDoors.length === 0
+                    ? wallRects
+                    : [...wallRects, ...closedDoors]
+            this.solidObstaclesDirty = false
+        }
+        return this.solidObstaclesCache
     }
 
     private criarEscuridao(): void {
@@ -1746,7 +1785,10 @@ export class GameScene
                         this.inventory,
                     puzzles:
                         this.puzzles,
-                    raioInteracao: 45,
+                    raioInteracao:
+                        PICKUP_RADIUS,
+                    getObstacles: () =>
+                        this.getSolidObstacles(),
                 },
             )
 
@@ -1769,6 +1811,8 @@ export class GameScene
                     : porta.def.altura,
             }
 
+            this.solidObstaclesDirty = true
+
             this.patagorasPathfinder.setDynamicObstacle(
                 porta.id,
                 rect,
@@ -1778,6 +1822,7 @@ export class GameScene
             porta.on(
                 DOOR_EVENTS.OPENED,
                 () => {
+                    this.solidObstaclesDirty = true
                     this.patagorasPathfinder.setDynamicObstacle(
                         porta.id,
                         rect,
@@ -1789,6 +1834,7 @@ export class GameScene
             porta.on(
                 DOOR_EVENTS.CLOSED,
                 () => {
+                    this.solidObstaclesDirty = true
                     this.patagorasPathfinder.setDynamicObstacle(
                         porta.id,
                         rect,
@@ -2206,6 +2252,16 @@ export class GameScene
 
         this.puzzles.on(
             PUZZLE_EVENTS
+                .FAILED,
+            () => {
+                this.patagoras.setErrorCount(
+                    this.puzzles.totalErros,
+                )
+            },
+        )
+
+        this.puzzles.on(
+            PUZZLE_EVENTS
                 .CLOSED,
 
             (
@@ -2428,10 +2484,13 @@ export class GameScene
                 0.8,
             )
 
+        const { x, y } =
+            getActorCenter(this.player)
+
         this.pickupRadiusDebug
             .strokeCircle(
-                this.player.x,
-                this.player.y,
+                x,
+                y,
                 PICKUP_RADIUS,
             )
     }

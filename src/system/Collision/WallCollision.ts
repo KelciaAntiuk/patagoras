@@ -71,10 +71,21 @@ export class WallCollision {
       this.scene.physics.add.collider(
         actor,
         this.group,
-        undefined,
+        this.onWallCollide,
         this.processWallCollision,
         this,
       )
+
+    const originalUpdate =
+      collider.update.bind(collider)
+
+    collider.update = (): void => {
+      try {
+        originalUpdate()
+      } finally {
+        this.scene.physics.world.forceX = false
+      }
+    }
 
     this.colliders.set(
       actor,
@@ -102,6 +113,10 @@ export class WallCollision {
   getGroup():
     Phaser.Physics.Arcade.StaticGroup {
     return this.group
+  }
+
+  getWallRects(): readonly WorldRect[] {
+    return this.wallRects
   }
 
   destroy(): void {
@@ -140,6 +155,10 @@ export class WallCollision {
     }
 
     return false
+  }
+
+  private onWallCollide(): void {
+    this.scene.physics.world.forceX = false
   }
 
   private processWallCollision(
@@ -197,8 +216,6 @@ export class WallCollision {
       resolveXFirst = penX < penY
     }
 
-    this.scene.physics.world.forceX = resolveXFirst
-
     const cornerThreshold = 3.5
     if (
       Math.abs(actorBody.velocity.y) > 5 &&
@@ -247,6 +264,18 @@ export class WallCollision {
         }
       }
     }
+
+    if (
+      actorBody.right <= wallBody.left ||
+      actorBody.bottom <= wallBody.top ||
+      actorBody.left >= wallBody.right ||
+      actorBody.top >= wallBody.bottom
+    ) {
+      this.scene.physics.world.forceX = false
+      return false
+    }
+
+    this.scene.physics.world.forceX = resolveXFirst
 
     return true
   }
