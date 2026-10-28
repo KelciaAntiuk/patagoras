@@ -15,7 +15,7 @@ const DICA_ABERTA = 'Aberta'
 
 export class PuzzleDoorSystem extends Phaser.Events.EventEmitter {
   private readonly portas: PuzzleDoor[] = []
-  private readonly colliders = new Map<PuzzleDoor, Phaser.Physics.Arcade.Collider>()
+  private readonly colliders = new Map<PuzzleDoor, Phaser.Physics.Arcade.Collider[]>()
   // Suporta múltiplas portas associadas ao mesmo puzzleId
   private readonly puzzleMap = new Map<PuzzleId, PuzzleDoor[]>()
 
@@ -23,6 +23,7 @@ export class PuzzleDoorSystem extends Phaser.Events.EventEmitter {
   private readonly raio: number
 
   private readonly jogador: Phaser.Physics.Arcade.Sprite
+  private readonly atoresColisao: Phaser.Physics.Arcade.Sprite[]
   private readonly inventario: InventorySystem
   private puzzleSystem?: PuzzleSystem
 
@@ -32,6 +33,10 @@ export class PuzzleDoorSystem extends Phaser.Events.EventEmitter {
   ) {
     super()
     this.jogador = config.jogador
+    this.atoresColisao = [
+      config.jogador,
+      ...(config.atoresColisao ?? []),
+    ]
     this.inventario = config.inventario
     this.raio = config.raioInteracao ?? RAIO_INTERACAO_PADRAO
     if (config.puzzles) {
@@ -43,8 +48,10 @@ export class PuzzleDoorSystem extends Phaser.Events.EventEmitter {
     const porta = new PuzzleDoor(this.scene, def)
     this.portas.push(porta)
 
-    const collider = porta.bindCollider(this.jogador)
-    this.colliders.set(porta, collider)
+    this.colliders.set(
+      porta,
+      this.atoresColisao.map((ator) => porta.bindCollider(ator)),
+    )
 
     if (def.condicao.tipo === 'puzzle') {
       const lista = this.puzzleMap.get(def.condicao.puzzleId) ?? []
@@ -58,17 +65,19 @@ export class PuzzleDoorSystem extends Phaser.Events.EventEmitter {
     porta.on(DOOR_EVENTS.LOCKED_FEEDBACK, (p: PuzzleDoor) => this.emit(DOOR_EVENTS.LOCKED_FEEDBACK, p))
 
     porta.on(DOOR_EVENTS.OPENED, () => {
-      const c = this.colliders.get(porta)
-      if (c) {
-        c.destroy()
+      const lista = this.colliders.get(porta)
+      if (lista) {
+        lista.forEach((c) => c.destroy())
         this.colliders.delete(porta)
       }
     })
 
     porta.on(DOOR_EVENTS.CLOSED, () => {
       if (!this.colliders.has(porta)) {
-        const novoCollider = porta.bindCollider(this.jogador)
-        this.colliders.set(porta, novoCollider)
+        this.colliders.set(
+          porta,
+          this.atoresColisao.map((ator) => porta.bindCollider(ator)),
+        )
       }
     })
 
@@ -158,7 +167,7 @@ export class PuzzleDoorSystem extends Phaser.Events.EventEmitter {
   }
 
   destroy(): void {
-    this.colliders.forEach((c) => c.destroy())
+    this.colliders.forEach((lista) => lista.forEach((c) => c.destroy()))
     this.colliders.clear()
     this.portas.forEach((p) => p.destroy())
     this.portas.length = 0

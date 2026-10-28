@@ -1,4 +1,9 @@
 export const PATAGORAS_CONFIG = {
+    scale: 1,
+    bodyWidth: 10,
+    bodyHeight: 8,
+    bodyOffsetX: 5,
+    bodyOffsetY: 11,
     speed: 45,
     chaseSpeed: 60,
     detectionRadius: 200,
@@ -12,6 +17,6 @@ export const PATAGORAS_CONFIG = {
     hitCooldownMs: 1000,
     hitRecoveryMs: 5000,
     pathRecalculateMs: 250,
-    waypointReachDistance: 8,
-    pathfindingPadding: 6,
+    waypointReachDistance: 4,
+    pathfindingPadding: 0,
 } as const

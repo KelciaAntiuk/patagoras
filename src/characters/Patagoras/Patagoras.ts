@@ -30,11 +30,18 @@ export class Patagoras {
             )
 
         this.sprite
+            .setScale(PATAGORAS_CONFIG.scale)
             .setDepth(5)
 
         this.sprite
-            .setSize(14, 14)
-            .setOffset(3, 4)
+            .setSize(
+                PATAGORAS_CONFIG.bodyWidth,
+                PATAGORAS_CONFIG.bodyHeight,
+            )
+            .setOffset(
+                PATAGORAS_CONFIG.bodyOffsetX,
+                PATAGORAS_CONFIG.bodyOffsetY,
+            )
 
         this.sprite
             .setCollideWorldBounds(
@@ -60,6 +67,18 @@ export class Patagoras {
             state
     }
 
+    public getBodyCenterX(): number {
+        return this.sprite.body
+            ? this.sprite.body.center.x
+            : this.sprite.x
+    }
+
+    public getBodyCenterY(): number {
+        return this.sprite.body
+            ? this.sprite.body.center.y
+            : this.sprite.y
+    }
+
     public moveTowards(
         x: number,
         y: number,
@@ -70,8 +89,8 @@ export class Patagoras {
 
         const direction =
             new Phaser.Math.Vector2(
-                x - this.sprite.x,
-                y - this.sprite.y,
+                x - this.getBodyCenterX(),
+                y - this.getBodyCenterY(),
             )
 
         if (

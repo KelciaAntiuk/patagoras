@@ -100,6 +100,7 @@ export interface PuzzleDoorSystemConfig {
   readonly jogador: Phaser.Physics.Arcade.Sprite
   readonly inventario: InventorySystem
   readonly puzzles?: import('../Puzzle/PuzzleSystem').PuzzleSystem
+  readonly atoresColisao?: readonly Phaser.Physics.Arcade.Sprite[]
 
   /** Raio de proximidade para habilitar interação (padrão: 40). */
   readonly raioInteracao?: number

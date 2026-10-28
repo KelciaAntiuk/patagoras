@@ -156,10 +156,16 @@ export class PatagorasAI {
         const distanceToPlayer =
             this.getDistanceToPlayer()
 
+        const playerX =
+            this.getPlayerX()
+
+        const playerY =
+            this.getPlayerY()
+
         this.lastKnownPlayerPosition
             .set(
-                this.player.x,
-                this.player.y,
+                playerX,
+                playerY,
             )
 
         if (
@@ -175,8 +181,8 @@ export class PatagorasAI {
 
         const hasPath =
             this.followPathTo(
-                this.player.x,
-                this.player.y,
+                playerX,
+                playerY,
                 PATAGORAS_CONFIG
                     .chaseSpeed,
                 true,
@@ -210,8 +216,8 @@ export class PatagorasAI {
 
         const distanceToLastPosition =
             Phaser.Math.Distance.Between(
-                this.patagoras.sprite.x,
-                this.patagoras.sprite.y,
+                this.patagoras.getBodyCenterX(),
+                this.patagoras.getBodyCenterY(),
                 this.lastKnownPlayerPosition.x,
                 this.lastKnownPlayerPosition.y,
             )
@@ -309,8 +315,8 @@ export class PatagorasAI {
 
         const distanceToTarget =
             Phaser.Math.Distance.Between(
-                this.patagoras.sprite.x,
-                this.patagoras.sprite.y,
+                this.patagoras.getBodyCenterX(),
+                this.patagoras.getBodyCenterY(),
                 this.wanderTarget.x,
                 this.wanderTarget.y,
             )
@@ -387,12 +393,18 @@ export class PatagorasAI {
             PATAGORAS_CONFIG
                 .playerReachabilityCheckMs
 
+        const playerX =
+            this.getPlayerX()
+
+        const playerY =
+            this.getPlayerY()
+
         const path =
             this.pathfinder.findPath(
-                this.patagoras.sprite.x,
-                this.patagoras.sprite.y,
-                this.player.x,
-                this.player.y,
+                this.patagoras.getBodyCenterX(),
+                this.patagoras.getBodyCenterY(),
+                playerX,
+                playerY,
             )
 
         /*
@@ -418,8 +430,8 @@ export class PatagorasAI {
 
         this.lastKnownPlayerPosition
             .set(
-                this.player.x,
-                this.player.y,
+                playerX,
+                playerY,
             )
 
         this.patagoras.setState(
@@ -483,10 +495,10 @@ export class PatagorasAI {
     private chooseWanderTarget(): void {
 
         const originX =
-            this.patagoras.sprite.x
+            this.patagoras.getBodyCenterX()
 
         const originY =
-            this.patagoras.sprite.y
+            this.patagoras.getBodyCenterY()
 
         for (
             let attempt = 0;
@@ -582,6 +594,12 @@ export class PatagorasAI {
         const now =
             this.scene.time.now
 
+        const currentX =
+            this.patagoras.getBodyCenterX()
+
+        const currentY =
+            this.patagoras.getBodyCenterY()
+
         const needsNewPath =
             this.currentPath.length === 0 ||
             this.waypointIndex >=
@@ -596,8 +614,8 @@ export class PatagorasAI {
 
             const path =
                 this.pathfinder.findPath(
-                    this.patagoras.sprite.x,
-                    this.patagoras.sprite.y,
+                    currentX,
+                    currentY,
                     targetX,
                     targetY,
                 )
@@ -644,8 +662,8 @@ export class PatagorasAI {
 
         const distanceToWaypoint =
             Phaser.Math.Distance.Between(
-                this.patagoras.sprite.x,
-                this.patagoras.sprite.y,
+                currentX,
+                currentY,
                 waypoint.x,
                 waypoint.y,
             )
@@ -696,14 +714,26 @@ export class PatagorasAI {
         return true
     }
 
+    private getPlayerX(): number {
+        return this.player.body
+            ? this.player.body.center.x
+            : this.player.x
+    }
+
+    private getPlayerY(): number {
+        return this.player.body
+            ? this.player.body.center.y
+            : this.player.y
+    }
+
     private getDistanceToPlayer():
         number {
 
         return Phaser.Math.Distance.Between(
-            this.patagoras.sprite.x,
-            this.patagoras.sprite.y,
-            this.player.x,
-            this.player.y,
+            this.patagoras.getBodyCenterX(),
+            this.patagoras.getBodyCenterY(),
+            this.getPlayerX(),
+            this.getPlayerY(),
         )
     }
 
