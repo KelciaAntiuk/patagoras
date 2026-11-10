@@ -1,5 +1,9 @@
 import Phaser from 'phaser'
 
+import {
+  PLAYER_CONFIG,
+} from '../../characters/Player/Player.config'
+
 import type {
   ItemDefinition,
 } from '../Inventory/Inventory.types'
@@ -16,13 +20,20 @@ import {
 import type {
   CollisionConfig,
   PhysicsActor,
+  WorldRect,
 } from './Collision.types'
+
+import {
+  getActorCenter,
+  hasLineOfSight,
+} from './LineOfSight'
 
 import {
   Pickup,
 } from './Pickup'
 
-const DEFAULT_PICKUP_RADIUS = 28
+const DEFAULT_PICKUP_RADIUS =
+  PLAYER_CONFIG.interactionRadius
 
 export class PickupCollision
   extends Phaser.Events.EventEmitter {
@@ -35,6 +46,9 @@ export class PickupCollision
 
   private readonly radius:
     number
+
+  private readonly getObstacles?:
+    () => readonly WorldRect[]
 
   private actor?: PhysicsActor
 
@@ -60,6 +74,9 @@ export class PickupCollision
     this.radius =
       config.pickupRadius ??
       DEFAULT_PICKUP_RADIUS
+
+    this.getObstacles =
+      config.getObstacles
 
     this.group =
       scene.physics.add.staticGroup()
@@ -89,6 +106,8 @@ export class PickupCollision
   }
 
   tryCollect(): boolean {
+    this.update()
+
     if (!this.current) {
       return false
     }
@@ -183,6 +202,14 @@ export class PickupCollision
       return null
     }
 
+    const { x, y } =
+      getActorCenter(this.actor)
+
+    const obstacles =
+      this.getObstacles
+        ? this.getObstacles()
+        : []
+
     let nearest:
       Pickup | null = null
 
@@ -203,12 +230,8 @@ export class PickupCollision
       const distance =
         Phaser.Math.Distance
           .Between(
-            this.actor.body
-              .center.x,
-
-            this.actor.body
-              .center.y,
-
+            x,
+            y,
             child.x,
             child.y,
           )
@@ -217,7 +240,14 @@ export class PickupCollision
         distance <=
         this.radius &&
         distance <
-        nearestDistance
+        nearestDistance &&
+        hasLineOfSight(
+          x,
+          y,
+          child.x,
+          child.y,
+          obstacles,
+        )
       ) {
         nearest = child
         nearestDistance =

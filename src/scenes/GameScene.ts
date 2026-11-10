@@ -17,6 +17,10 @@ import type {
     WorldRect,
 } from '../system/Collision/Collision.types'
 
+import {
+    getActorCenter,
+} from '../system/Collision/LineOfSight'
+
 import type {
     Pickup,
 } from '../system/Collision/Pickup'
@@ -44,6 +48,10 @@ import {
 import {
     PlayerLifeSystem,
 } from '../characters/Player/PlayerLifeSystem'
+
+import {
+    PLAYER_CONFIG,
+} from '../characters/Player/Player.config'
 
 import {
     PLAYER_LIFE_EVENTS,
@@ -129,7 +137,7 @@ const TAMANHO_ESCURIDAO = 800
 const WORLD_WIDTH = 2400
 const WORLD_HEIGHT = 1800
 
-const PICKUP_RADIUS = 90
+const PICKUP_RADIUS = PLAYER_CONFIG.interactionRadius
 
 const SPAWN_JOGADOR_X = 470
 const SPAWN_JOGADOR_Y = 600
@@ -140,19 +148,19 @@ const PUZZLE_TESTE_Y = 660
 const PORTAS: readonly PuzzleDoorDefinition[] = [
     {
         id: 'porta-refeitorio',
-        x: 475,
-        y: 565,
-        largura: 40,
-        altura: 42,
+        x: 476,
+        y: 572,
+        largura: 48,
+        altura: 32,
         condicao: { tipo: 'puzzle', puzzleId: 'refeitorio' },
         mensagemAbrir: 'O refeitório foi destrancado.',
     },
     {
         id: 'porta-cozinha',
-        x: 255,
-        y: 482,
+        x: 252,
+        y: 484,
         largura: 16,
-        altura: 30,
+        altura: 32,
         condicao: { tipo: 'puzzle', puzzleId: 'entrada-cozinha' },
         mensagemAbrir: 'A cozinha foi destrancada.',
     },
@@ -161,7 +169,7 @@ const PORTAS: readonly PuzzleDoorDefinition[] = [
         x: 276,
         y: 412,
         largura: 32,
-        altura: 20,
+        altura: 16,
         condicao: { tipo: 'puzzle', puzzleId: 'sala-aula-1' },
         mensagemAbrir: 'A sala de aula 1 e a biblioteca foram destrancadas!',
     },
@@ -483,6 +491,11 @@ export class GameScene
 
     private debugVisible = false
 
+    private solidObstaclesCache:
+        readonly WorldRect[] = []
+
+    private solidObstaclesDirty = true
+
     private ultimaDirecao:
         | 'frente'
         | 'diagonal-baixo'
@@ -728,10 +741,18 @@ export class GameScene
                 SPAWN_JOGADOR_Y,
                 'sprite_jogador',
             )
-        this.player.setDepth(5)
-        // Hitbox nos pés (12x12) para frame de 24x24 (offset 6, 10)
-        this.player.setSize(12, 12)
-        this.player.setOffset(6, 10)
+        this.player
+            .setScale(PLAYER_CONFIG.scale)
+            .setDepth(5)
+        // Hitbox na base/pés (10x8) separada das dimensões visuais do frame 24x24 (offset 7, 16)
+        this.player.setSize(
+            PLAYER_CONFIG.bodyWidth,
+            PLAYER_CONFIG.bodyHeight,
+        )
+        this.player.setOffset(
+            PLAYER_CONFIG.bodyOffsetX,
+            PLAYER_CONFIG.bodyOffsetY,
+        )
 
         // Movimentação do personagem para frente (baixo) - frames 8, 9, 10, 11
         this.anims.create({
@@ -910,6 +931,9 @@ export class GameScene
 
                     pickupRadius:
                         PICKUP_RADIUS,
+
+                    getObstacles: () =>
+                        this.getSolidObstacles(),
                 },
             )
 
@@ -996,6 +1020,12 @@ export class GameScene
 
                     patagorasHit:
                         this.patagorasHit,
+
+                    raioInteracao:
+                        PICKUP_RADIUS,
+
+                    getObstacles: () =>
+                        this.getSolidObstacles(),
                 },
             )
 
@@ -1186,6 +1216,9 @@ export class GameScene
 
                 this.patagoras
                     .destroy()
+
+                this.solidObstaclesCache = []
+                this.solidObstaclesDirty = true
             },
         )
 
@@ -1437,6 +1470,24 @@ export class GameScene
         }
     }
 
+    private getSolidObstacles(): readonly WorldRect[] {
+        if (!this.doorSystem) {
+            return this.collision.walls.getWallRects()
+        }
+        if (this.solidObstaclesDirty) {
+            const wallRects =
+                this.collision.walls.getWallRects()
+            const closedDoors =
+                this.doorSystem.getClosedDoorRects()
+            this.solidObstaclesCache =
+                closedDoors.length === 0
+                    ? wallRects
+                    : [...wallRects, ...closedDoors]
+            this.solidObstaclesDirty = false
+        }
+        return this.solidObstaclesCache
+    }
+
     private criarEscuridao(): void {
         if (!this.textures.exists('escuridao')) {
             const textura =
@@ -1660,7 +1711,7 @@ export class GameScene
             rows.get(y)!.push(x)
         })
 
-        const rects: WorldRect[] = []
+        const horizontalRects: WorldRect[] = []
         rows.forEach((xList, y) => {
             xList.sort((a, b) => a - b)
             let startX = xList[0]
@@ -1669,7 +1720,7 @@ export class GameScene
                 if (xList[i] === prevX + 16) {
                     prevX = xList[i]
                 } else {
-                    rects.push({
+                    horizontalRects.push({
                         x: startX,
                         y,
                         width: prevX - startX + 16,
@@ -1679,7 +1730,7 @@ export class GameScene
                     prevX = xList[i]
                 }
             }
-            rects.push({
+            horizontalRects.push({
                 x: startX,
                 y,
                 width: prevX - startX + 16,
@@ -1687,7 +1738,35 @@ export class GameScene
             })
         })
 
-        return rects
+        horizontalRects.sort((a, b) =>
+            a.x !== b.x
+                ? a.x - b.x
+                : a.width !== b.width
+                  ? a.width - b.width
+                  : a.y - b.y,
+        )
+
+        const mergedRects: WorldRect[] = []
+        for (const rect of horizontalRects) {
+            const last = mergedRects[mergedRects.length - 1]
+            if (
+                last &&
+                last.x === rect.x &&
+                last.width === rect.width &&
+                last.y + last.height === rect.y
+            ) {
+                mergedRects[mergedRects.length - 1] = {
+                    x: last.x,
+                    y: last.y,
+                    width: last.width,
+                    height: last.height + rect.height,
+                }
+            } else {
+                mergedRects.push(rect)
+            }
+        }
+
+        return mergedRects
     }
 
     private criarPortas():
@@ -1699,43 +1778,105 @@ export class GameScene
                 {
                     jogador:
                         this.player,
+                    atoresColisao: [
+                        this.patagoras.sprite,
+                    ],
                     inventario:
                         this.inventory,
                     puzzles:
                         this.puzzles,
-                    raioInteracao: 45,
+                    raioInteracao:
+                        PICKUP_RADIUS,
+                    getObstacles: () =>
+                        this.getSolidObstacles(),
                 },
             )
 
+        const registrarObstaculoPorta = (
+            porta: PuzzleDoor,
+        ): void => {
+            const isRefeitorio =
+                porta.id === 'porta-refeitorio'
+            const rect: WorldRect = {
+                x:
+                    porta.def.x -
+                    porta.def.largura / 2,
+                y: isRefeitorio
+                    ? 564
+                    : porta.def.y -
+                      porta.def.altura / 2,
+                width: porta.def.largura,
+                height: isRefeitorio
+                    ? 32
+                    : porta.def.altura,
+            }
+
+            this.solidObstaclesDirty = true
+
+            this.patagorasPathfinder.setDynamicObstacle(
+                porta.id,
+                rect,
+                !porta.isOpen,
+            )
+
+            porta.on(
+                DOOR_EVENTS.OPENED,
+                () => {
+                    this.solidObstaclesDirty = true
+                    this.patagorasPathfinder.setDynamicObstacle(
+                        porta.id,
+                        rect,
+                        false,
+                    )
+                },
+            )
+
+            porta.on(
+                DOOR_EVENTS.CLOSED,
+                () => {
+                    this.solidObstaclesDirty = true
+                    this.patagorasPathfinder.setDynamicObstacle(
+                        porta.id,
+                        rect,
+                        true,
+                    )
+                },
+            )
+        }
+
         PORTAS.forEach(
             (def) => {
-                this.doorSystem
-                    .adicionarPorta(
-                        def,
-                    )
+                const porta =
+                    this.doorSystem
+                        .adicionarPorta(
+                            def,
+                        )
+                registrarObstaculoPorta(porta)
             },
         )
 
         // PORTA DA BIBLIOTECA: só destranca depois do puzzle da sala 1.
         // Usa callback (e não puzzleId) porque o puzzle da sala 1 já
         // está vinculado à porta da própria sala 1.
-        this.doorSystem
-            .adicionarPorta({
-                id: PORTA_BIBLIOTECA_ID,
-                x: 564,
-                y: 412,
-                largura: 32,
-                altura: 20,
-                condicao: {
-                    tipo: 'callback',
-                    fn: () =>
-                        this.puzzles
-                            .estado('sala-aula-1') ===
-                        PuzzleEstado.Resolvido,
-                },
-                mensagemTrancada: 'Biblioteca trancada',
-                mensagemAbrir: 'A biblioteca foi destrancada.',
-            })
+        const portaBiblioteca =
+            this.doorSystem
+                .adicionarPorta({
+                    id: PORTA_BIBLIOTECA_ID,
+                    x: 564,
+                    y: 412,
+                    largura: 32,
+                    altura: 16,
+                    condicao: {
+                        tipo: 'callback',
+                        fn: () =>
+                            this.puzzles
+                                .estado('sala-aula-1') ===
+                            PuzzleEstado.Resolvido,
+                    },
+                    mensagemTrancada: 'Biblioteca trancada',
+                    mensagemAbrir: 'A biblioteca foi destrancada.',
+                })
+        registrarObstaculoPorta(portaBiblioteca)
     }
 
     private abrirPorta(
@@ -2111,6 +2252,16 @@ export class GameScene
 
         this.puzzles.on(
             PUZZLE_EVENTS
+                .FAILED,
+            () => {
+                this.patagoras.setErrorCount(
+                    this.puzzles.totalErros,
+                )
+            },
+        )
+
+        this.puzzles.on(
+            PUZZLE_EVENTS
                 .CLOSED,
 
             (
@@ -2333,10 +2484,13 @@ export class GameScene
                 0.8,
             )
 
+        const { x, y } =
+            getActorCenter(this.player)
+
         this.pickupRadiusDebug
             .strokeCircle(
-                this.player.x,
-                this.player.y,
+                x,
+                y,
                 PICKUP_RADIUS,
             )
     }

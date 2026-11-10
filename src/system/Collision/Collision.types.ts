@@ -44,4 +44,5 @@ export type CollisionEvent =
 export interface CollisionConfig {
   readonly pickupMode?: PickupMode
   readonly pickupRadius?: number
+  readonly getObstacles?: () => readonly WorldRect[]
 }

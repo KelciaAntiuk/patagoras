@@ -40,6 +40,9 @@ export class CollisionSystem
   readonly pickups:
     PickupCollision
 
+  private readonly getObstaclesFn:
+    () => readonly WorldRect[]
+
   private debugVisible = false
 
   private readonly pickupEventHandlers =
@@ -65,11 +68,20 @@ export class CollisionSystem
         scene,
       )
 
+    this.getObstaclesFn = () =>
+      config.getObstacles
+        ? config.getObstacles()
+        : this.walls.getWallRects()
+
     this.pickups =
       new PickupCollision(
         scene,
         inventory,
-        config,
+        {
+          ...config,
+          getObstacles:
+            this.getObstaclesFn,
+        },
       )
 
     const events =
@@ -112,6 +124,10 @@ export class CollisionSystem
     )
 
     return this
+  }
+
+  getObstacles(): readonly WorldRect[] {
+    return this.getObstaclesFn()
   }
 
   spawnPickup(
