@@ -575,7 +575,7 @@ export class GameScene
         }
 
         this.load.image('sprite-pilha', 'assets/sprites/puzzles/pilha02.png')
-        this.load.image('sprite-comida', 'assets/sprites/puzzles/comida.png')
+        this.load.image('sprite-comida', 'assets/sprites/puzzles/lata-comida.png')
         this.load.image('sprite-chave', 'assets/sprites/puzzles/chave.png')
         this.load.image('sprite-papel', 'assets/sprites/puzzles/papel.png')
     }
