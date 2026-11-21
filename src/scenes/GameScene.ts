@@ -118,6 +118,12 @@ import type {
 const PLAYER_SPEED = 80
 
 const ZOOM_CAMERA = 2
+
+// TODO(remover): MODO DE TESTE TEMPORÁRIO
+// - Patágoras (pato) fica parado
+// - Todas as portas começam abertas, menos a da sala da
+//   avaliação final e a porta de saída
+const MODO_TESTE = true
 const ESCALA_INVENTARIO_HUD = 0.7
 const FONTE_HUD = '"Patrick Hand", Georgia, serif'
 const CORACAO = [
@@ -141,9 +147,6 @@ const PICKUP_RADIUS = PLAYER_CONFIG.interactionRadius
 
 const SPAWN_JOGADOR_X = 470
 const SPAWN_JOGADOR_Y = 600
-
-const PUZZLE_TESTE_X = 480
-const PUZZLE_TESTE_Y = 660
 
 const PORTAS: readonly PuzzleDoorDefinition[] = [
     {
@@ -176,39 +179,45 @@ const PORTAS: readonly PuzzleDoorDefinition[] = [
     ]
 
 const PORTA_BIBLIOTECA_ID = 'porta-biblioteca'
+const PORTA_DIRETORIA_ID = 'porta-diretoria'
+const PORTA_AVALIACAO_ID = 'porta-avaliacao-final'
+
+// SAÍDA: a chave aparece perto da porta de saída depois da avaliação final.
+const PORTA_SAIDA: PuzzleDoorDefinition = {
+    id: 'porta-saida',
+    x: 486,
+    // topo da porta alinhado ao topo da parede de baixo (y = 692)
+    y: 692 + 29 / 2,
+    largura: 48,
+    altura: 29,
+    textureKey: 'porta-dupla-fechada',
+    condicao: { tipo: 'item', itemId: 'chave-saida' },
+    mensagemTrancada: 'Saída trancada. Precisa de uma chave.',
+    mensagemAbrir: 'Você destrancou a saída e escapou do internato!',
+}
+
+const CHAVE_SAIDA: ItemDefinition = {
+    id: 'chave-saida',
+    name: 'Chave da saída',
+    description: 'A chave que abre a porta de saída do internato.',
+    textureKey: 'sprite-chave',
+    kind: ItemKind.Generic,
+}
+
+// Recortes da porta dupla de madeira no Dungeon_Tileset.png
+const PORTA_DUPLA_FECHADA = { key: 'porta-dupla-fechada', x: 10, y: 595, w: 48, h: 29 }
+
+// Parede grossa na parte de baixo da sala da saída (mesma altura da porta)
+const PAREDE_SAIDA = { x: 340, y: 692, largura: 272, altura: 29 }
+const COR_PAREDE = 0x44342c
+const COR_PAREDE_TOPO = 0x5a463a
+const COR_PAREDE_BASE = 0x2a1f19
+
+const CHAVE_SAIDA_X = 486
+const CHAVE_SAIDA_Y = 664
 
 const TEST_ITEMS:
     readonly ItemDefinition[] = [
-        {
-            id: 'rusty-key',
-            name: 'Chave enferrujada',
-            description:
-                'Uma chave velha encontrada no chão.',
-            textureKey:
-                'sprite-chave',
-            kind:
-                ItemKind.Generic,
-        },
-        {
-            id: 'strange-note',
-            name: 'Bilhete estranho',
-            description:
-                'Um bilhete com anotações incompletas.',
-            textureKey:
-                'sprite-papel',
-            kind:
-                ItemKind.Generic,
-        },
-        {
-            id: 'battery',
-            name: 'Pilha',
-            description:
-                'Talvez ainda tenha alguma carga.',
-            textureKey:
-                'sprite-pilha',
-            kind:
-                ItemKind.Generic,
-        },
         {
             id: 'food-can',
             name: 'Lata de comida',
@@ -384,6 +393,21 @@ const ITENS_DOS_PUZZLES: readonly {
         y: 392,
         cor: 0xfdcb6e,
     },
+    {
+        item: {
+            id: 'avaliacao-numero-7',
+            name: 'Número 7',
+            description:
+                'Um sete escrito a caneta vermelha, rasgado de uma prova corrigida.',
+            textureKey:
+                'sprite-numero-7',
+            kind: ItemKind.Number,
+            value: 7,
+        },
+        x: 268,
+        y: 492,
+        cor: 0xe17055,
+    },
 ]
 
 const TEST_ITEM_COLORS = [
@@ -418,6 +442,9 @@ export class GameScene
 
     private foodThrow!:
         FoodThrowSystem
+
+    /** Enquanto true, a escuridão segue a câmera (revelação da chave). */
+    private revelandoChave = false
 
     private escuridao!:
         Phaser.GameObjects.Image
@@ -1029,13 +1056,6 @@ export class GameScene
                 },
             )
 
-        this.puzzles
-            .adicionarGatilho(
-                PUZZLE_TESTE_X,
-                PUZZLE_TESTE_Y,
-                'teste',
-            )
-
         // GATILHOS DA BIBLIOTECA
         this.puzzles
             .adicionarGatilho(
@@ -1051,14 +1071,20 @@ export class GameScene
                 'biblioteca-senha',
             )
 
-        this.puzzles
-            .adicionarGatilho(
-                692,
-                340,
-                'diretor',
-            )
 
         this.criarPortas()
+
+        // TODO(remover): MODO DE TESTE — abre todas as portas menos avaliação final e saída
+        if (MODO_TESTE) {
+            const idsPortas = [
+                ...PORTAS.map((porta) => porta.id),
+                PORTA_BIBLIOTECA_ID,
+                PORTA_DIRETORIA_ID,
+            ]
+            idsPortas.forEach((id) => {
+                this.doorSystem.getPorta(id)?.unlock()
+            })
+        }
 
 
         // PUZZLE DENTRO DA SALA 2 (LIBERA A PORTA DA COZINHA)
@@ -1360,13 +1386,23 @@ export class GameScene
         }
 
         // ATUALIZA IA DO PATÁGORAS
-        this.patagorasAI.update()
+        // TODO(remover): MODO DE TESTE — pato parado
+        if (MODO_TESTE) {
+            this.patagoras.stop()
+        } else {
+            this.patagorasAI.update()
+        }
         this.patagoras.updateAnimation()
 
-        this.escuridao.setPosition(
-            this.player.x,
-            this.player.y,
-        )
+        if (this.revelandoChave) {
+            const centro = this.cameras.main.midPoint
+            this.escuridao.setPosition(centro.x, centro.y)
+        } else {
+            this.escuridao.setPosition(
+                this.player.x,
+                this.player.y,
+            )
+        }
 
         // ATUALIZA QUAL ITEM ESTÁ
         // MAIS PRÓXIMO DO PLAYER
@@ -1772,6 +1808,8 @@ export class GameScene
     private criarPortas():
         void {
 
+        this.criarTexturasPortaDupla()
+
         this.doorSystem =
             new PuzzleDoorSystem(
                 this,
@@ -1877,6 +1915,135 @@ export class GameScene
                     mensagemAbrir: 'A biblioteca foi destrancada.',
                 })
         registrarObstaculoPorta(portaBiblioteca)
+
+        // PORTA DA DIRETORIA (SALA DA AVALIAÇÃO FINAL):
+        // só destranca depois do armário da biblioteca.
+        const portaDiretoria =
+            this.doorSystem
+                .adicionarPorta({
+                    id: PORTA_DIRETORIA_ID,
+                    x: 604,
+                    y: 484,
+                    largura: 16,
+                    altura: 32,
+                    condicao: {
+                        tipo: 'callback',
+                        fn: () =>
+                            this.puzzles
+                                .estado('biblioteca-senha') ===
+                            PuzzleEstado.Resolvido,
+                    },
+                    mensagemTrancada: 'Diretoria trancada',
+                    mensagemAbrir: 'A diretoria foi destrancada.',
+                })
+        registrarObstaculoPorta(portaDiretoria)
+
+        // PORTA DA AVALIAÇÃO FINAL (corredor dentro da diretoria,
+        // marcada no mapa como "porta-secreta"): a própria porta é o
+        // puzzle 'avaliacao-final' (3x + 4 = 25).
+        const portaAvaliacao =
+            this.doorSystem
+                .adicionarPorta({
+                    id: PORTA_AVALIACAO_ID,
+                    x: 668,
+                    y: 524,
+                    largura: 48,
+                    altura: 29,
+                    textureKey: PORTA_DUPLA_FECHADA.key,
+                    condicao: {
+                        tipo: 'puzzle',
+                        puzzleId: 'avaliacao-final',
+                    },
+                })
+        registrarObstaculoPorta(portaAvaliacao)
+
+        this.criarParedeSaida()
+
+        const portaSaida =
+            this.doorSystem.adicionarPorta(PORTA_SAIDA)
+        registrarObstaculoPorta(portaSaida)
+
+        portaSaida.on(DOOR_EVENTS.UNLOCKED, () => {
+            if (PORTA_SAIDA.mensagemAbrir) {
+                this.mostrarStatus(PORTA_SAIDA.mensagemAbrir)
+            }
+
+            // Mostra a porta abrindo e depois o modal de vitória
+            this.time.delayedCall(700, () => {
+                this.scene.launch('VitoriaScene')
+                this.scene.pause()
+            })
+        })
+    }
+
+    /** Desenha a parede grossa onde fica a porta de saída. */
+    private criarParedeSaida(): void {
+        const { x, y, largura, altura } = PAREDE_SAIDA
+        this.add
+            .graphics()
+            .setDepth(4) // acima do mapa, abaixo da porta (5)
+            .fillStyle(COR_PAREDE)
+            .fillRect(x, y, largura, altura)
+            .fillStyle(COR_PAREDE_TOPO)
+            .fillRect(x, y, largura, 2)
+            .fillStyle(COR_PAREDE_BASE)
+            .fillRect(x, y + altura - 3, largura, 3)
+    }
+
+    /** Recorta a porta dupla fechada do Dungeon_Tileset. */
+    private criarTexturasPortaDupla(): void {
+        const fonte = this.textures
+            .get('dungeon-tileset')
+            .getSourceImage() as HTMLImageElement
+
+        for (const recorte of [PORTA_DUPLA_FECHADA]) {
+            if (this.textures.exists(recorte.key)) continue
+            const canvas = this.textures.createCanvas(
+                recorte.key,
+                recorte.w,
+                recorte.h,
+            )!
+            canvas.context.imageSmoothingEnabled = false
+            canvas.context.drawImage(
+                fonte,
+                recorte.x, recorte.y, recorte.w, recorte.h,
+                0, 0, recorte.w, recorte.h,
+            )
+            canvas.refresh()
+        }
+    }
+
+    /**
+     * Faz a chave da saída aparecer e leva a câmera até ela,
+     * voltando para o jogador em seguida. O jogo fica pausado
+     * durante a animação para o Patágoras não atacar.
+     */
+    private revelarChaveSaida(): void {
+        this.collision.spawnPickup(
+            CHAVE_SAIDA_X,
+            CHAVE_SAIDA_Y,
+            CHAVE_SAIDA,
+        )
+
+        const camera = this.cameras.main
+        const IDA_MS = 900
+        const PAUSA_MS = 1200
+        const VOLTA_MS = 700
+
+        this.revelandoChave = true
+        this.physics.pause()
+        camera.stopFollow()
+        camera.pan(CHAVE_SAIDA_X, CHAVE_SAIDA_Y, IDA_MS, 'Sine.easeInOut')
+
+        this.time.delayedCall(IDA_MS + PAUSA_MS, () => {
+            camera.pan(this.player.x, this.player.y, VOLTA_MS, 'Sine.easeInOut')
+
+            this.time.delayedCall(VOLTA_MS, () => {
+                camera.startFollow(this.player, true, 0.2, 0.2)
+                this.physics.resume()
+                this.revelandoChave = false
+            })
+        })
     }
 
     private abrirPorta(
@@ -1957,18 +2124,6 @@ export class GameScene
         void {
 
         const positions = [
-            {
-                x: 350,
-                y: 460,
-            },
-            {
-                x: 450,
-                y: 460,
-            },
-            {
-                x: 400,
-                y: 500,
-            },
             {
                 x: 480,
                 y: 480,
@@ -2200,6 +2355,16 @@ export class GameScene
                     }
                 }
 
+                // AVALIAÇÃO FINAL: abre a porta e revela a chave da saída
+                if (puzzleId === 'avaliacao-final') {
+                    this.abrirPorta(puzzleId)
+                    this.mostrarStatus(
+                        'Avaliação final concluída! Uma chave apareceu perto da saída.',
+                    )
+                    this.revelarChaveSaida()
+                    return
+                }
+
                 if (
                     this.abrirPorta(
                         puzzleId,
@@ -2215,16 +2380,14 @@ export class GameScene
                     return
                 }
 
-                if (puzzleId === 'diretor') {
-                    this.mostrarStatus(
-                        'Documento lido: Você descobriu os acontecimentos do incidente!',
-                    )
-                    return
-                }
-
                 if (puzzleId === 'biblioteca-senha') {
+                    const portaDiretoria =
+                        this.doorSystem.getPorta(PORTA_DIRETORIA_ID)
+                    if (portaDiretoria?.isLocked) {
+                        portaDiretoria.unlock()
+                    }
                     this.mostrarStatus(
-                        'Armário destrancado! Você encontrou os documentos confidenciais do Diretor.',
+                        'Armário destrancado! A diretoria foi aberta.',
                     )
                     return
                 }

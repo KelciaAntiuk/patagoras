@@ -8,7 +8,6 @@ export type PuzzleId =
   | 'sala-aula-2'
   | 'biblioteca-pista'
   | 'biblioteca-senha'
-  | 'diretor'
   | 'avaliacao-final'
 
 export const PUZZLES: Record<PuzzleId, PuzzleDefinicao> = {
@@ -86,17 +85,10 @@ export const PUZZLES: Record<PuzzleId, PuzzleDefinicao> = {
     ],
   },
 
-  diretor: {
-    tipo: 'nota',
-    titulo: 'Documento do diretor',
-    requisitos: ['biblioteca-senha'],
-    texto: 'Relatório confidencial sobre o incidente que deu origem aos acontecimentos do jogo.',
-  },
-
   'avaliacao-final': {
     tipo: 'slots',
     titulo: 'Avaliação final',
-    requisitos: ['diretor'],
+    // Sem requisitos: a porta da diretoria já só abre depois do armário da biblioteca.
     enunciado: '3x + 4 = 25',
     slots: [{ rotulo: 'x =', resposta: 7 }],
   },
