@@ -118,12 +118,6 @@ import type {
 const PLAYER_SPEED = 80
 
 const ZOOM_CAMERA = 2
-
-// TODO(remover): MODO DE TESTE TEMPORÁRIO
-// - Patágoras (pato) fica parado
-// - Todas as portas começam abertas, menos a da sala da
-//   avaliação final e a porta de saída
-const MODO_TESTE = true
 const ESCALA_INVENTARIO_HUD = 0.7
 const FONTE_HUD = '"Patrick Hand", Georgia, serif'
 const CORACAO = [
@@ -1074,17 +1068,6 @@ export class GameScene
 
         this.criarPortas()
 
-        // TODO(remover): MODO DE TESTE — abre todas as portas menos avaliação final e saída
-        if (MODO_TESTE) {
-            const idsPortas = [
-                ...PORTAS.map((porta) => porta.id),
-                PORTA_BIBLIOTECA_ID,
-                PORTA_DIRETORIA_ID,
-            ]
-            idsPortas.forEach((id) => {
-                this.doorSystem.getPorta(id)?.unlock()
-            })
-        }
 
 
         // PUZZLE DENTRO DA SALA 2 (LIBERA A PORTA DA COZINHA)
@@ -1386,12 +1369,7 @@ export class GameScene
         }
 
         // ATUALIZA IA DO PATÁGORAS
-        // TODO(remover): MODO DE TESTE — pato parado
-        if (MODO_TESTE) {
-            this.patagoras.stop()
-        } else {
-            this.patagorasAI.update()
-        }
+        this.patagorasAI.update()
         this.patagoras.updateAnimation()
 
         if (this.revelandoChave) {
