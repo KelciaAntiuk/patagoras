@@ -1038,8 +1038,10 @@ export class GameScene
         this.patagoras =
             new Patagoras(
                 this,
-                550,
-                460,
+                // Canto oposto à porta do refeitório, fora do raio de
+                // detecção: o jogador não apanha logo ao entrar
+                284,
+                444,
             )
 
         // LIMITES FÍSICOS DO MUNDO
