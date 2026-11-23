@@ -142,9 +142,6 @@ const PICKUP_RADIUS = PLAYER_CONFIG.interactionRadius
 const SPAWN_JOGADOR_X = 470
 const SPAWN_JOGADOR_Y = 600
 
-const PUZZLE_TESTE_X = 480
-const PUZZLE_TESTE_Y = 660
-
 const PORTA_SPRITESHEETS: readonly {
     readonly key: string
     readonly path: string
@@ -2428,6 +2425,70 @@ export class GameScene
             defBiblioteca.altura,
         )
 
+        // PORTA DA DIRETORIA (SALA DA AVALIAÇÃO FINAL):
+        // só destranca depois do armário da biblioteca.
+        nomesPortasComSistema.add('porta-diretoria')
+        const dadosDiretoria = portasTiled.get('porta-diretoria')
+        const defDiretoria: PuzzleDoorDefinition = {
+            id: PORTA_DIRETORIA_ID,
+            x: dadosDiretoria?.x ?? 604,
+            y: dadosDiretoria?.y ?? 484,
+            largura: dadosDiretoria?.largura ?? 16,
+            altura: dadosDiretoria?.altura ?? 32,
+            condicao: {
+                tipo: 'callback',
+                fn: () =>
+                    this.puzzles
+                        .estado('biblioteca-senha') ===
+                    PuzzleEstado.Resolvido,
+            },
+            mensagemTrancada: 'Diretoria trancada',
+            mensagemAbrir: 'A diretoria foi destrancada.',
+            textureKey: PORTA_TEXTURA_POR_ID['porta-diretoria'],
+            closeFrame: 0,
+            openFrame: 1,
+        }
+        const portaDiretoria =
+            this.doorSystem.adicionarPorta(defDiretoria)
+        registrarObstaculoPorta(portaDiretoria)
+        registrarPortaVisual(
+            portaDiretoria,
+            defDiretoria.x,
+            defDiretoria.y,
+            defDiretoria.largura,
+            defDiretoria.altura,
+        )
+
+        // PORTA DA AVALIAÇÃO FINAL (corredor dentro da diretoria,
+        // marcada no mapa como "porta-secreta"): a própria porta é o
+        // puzzle 'avaliacao-final' (3x + 4 = 25).
+        nomesPortasComSistema.add('porta-secreta')
+        const dadosAvaliacao = portasTiled.get('porta-secreta')
+        const defAvaliacao: PuzzleDoorDefinition = {
+            id: PORTA_AVALIACAO_ID,
+            x: dadosAvaliacao?.x ?? 668,
+            y: dadosAvaliacao?.y ?? 524,
+            largura: dadosAvaliacao?.largura ?? 48,
+            altura: dadosAvaliacao?.altura ?? 16,
+            textureKey: PORTA_TEXTURA_POR_ID['porta-secreta'],
+            closeFrame: 0,
+            openFrame: 1,
+            condicao: {
+                tipo: 'puzzle',
+                puzzleId: 'avaliacao-final',
+            },
+        }
+        const portaAvaliacao =
+            this.doorSystem.adicionarPorta(defAvaliacao)
+        registrarObstaculoPorta(portaAvaliacao)
+        registrarPortaVisual(
+            portaAvaliacao,
+            defAvaliacao.x,
+            defAvaliacao.y,
+            defAvaliacao.largura,
+            defAvaliacao.altura,
+        )
+
         // Sprites visuais das demais portas da camada 'Portas' que já começam abertas
         portasTiled.forEach((dados, nomeTiled) => {
             if (nomesPortasComSistema.has(nomeTiled)) {
@@ -2448,47 +2509,7 @@ export class GameScene
                 dados.largura,
                 dados.altura,
             )
-
-        // PORTA DA DIRETORIA (SALA DA AVALIAÇÃO FINAL):
-        // só destranca depois do armário da biblioteca.
-        const portaDiretoria =
-            this.doorSystem
-                .adicionarPorta({
-                    id: PORTA_DIRETORIA_ID,
-                    x: 604,
-                    y: 484,
-                    largura: 16,
-                    altura: 32,
-                    condicao: {
-                        tipo: 'callback',
-                        fn: () =>
-                            this.puzzles
-                                .estado('biblioteca-senha') ===
-                            PuzzleEstado.Resolvido,
-                    },
-                    mensagemTrancada: 'Diretoria trancada',
-                    mensagemAbrir: 'A diretoria foi destrancada.',
-                })
-        registrarObstaculoPorta(portaDiretoria)
-
-        // PORTA DA AVALIAÇÃO FINAL (corredor dentro da diretoria,
-        // marcada no mapa como "porta-secreta"): a própria porta é o
-        // puzzle 'avaliacao-final' (3x + 4 = 25).
-        const portaAvaliacao =
-            this.doorSystem
-                .adicionarPorta({
-                    id: PORTA_AVALIACAO_ID,
-                    x: 668,
-                    y: 524,
-                    largura: 48,
-                    altura: 29,
-                    textureKey: PORTA_DUPLA_FECHADA.key,
-                    condicao: {
-                        tipo: 'puzzle',
-                        puzzleId: 'avaliacao-final',
-                    },
-                })
-        registrarObstaculoPorta(portaAvaliacao)
+        })
 
         this.criarParedeSaida()
 
