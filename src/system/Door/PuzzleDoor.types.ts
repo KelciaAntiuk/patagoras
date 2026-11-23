@@ -91,6 +91,12 @@ export interface PuzzleDoorDefinition {
 
   /** Profundidade de renderização (padrão: 5). */
   readonly depth?: number
+
+  /** Se true, mantém a escala nativa 1:1 do sprite sem esticar/achatar para a hitbox. */
+  readonly manterEscalaNativa?: boolean
+
+  /** Origem vertical opcional do sprite (0..1, padrão: 0.5). */
+  readonly originY?: number
 }
 
 // ---------------------------------------------------------------------------
