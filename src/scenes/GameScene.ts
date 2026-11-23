@@ -258,123 +258,69 @@ const PORTAS: readonly PuzzleDoorDefinition[] = [
     ]
 
 const PORTA_BIBLIOTECA_ID = 'porta-biblioteca'
+const PORTA_DIRETORIA_ID = 'porta-diretoria'
+const PORTA_AVALIACAO_ID = 'porta-avaliacao-final'
 
-const TEST_ITEMS:
-    readonly ItemDefinition[] = [
-        {
-            id: 'rusty-key',
-            name: 'Chave enferrujada',
-            description:
-                'Uma chave velha encontrada no chão.',
-            textureKey:
-                'sprite-chave',
-            kind:
-                ItemKind.Generic,
-        },
-        {
-            id: 'strange-note',
-            name: 'Bilhete estranho',
-            description:
-                'Um bilhete com anotações incompletas.',
-            textureKey:
-                'sprite-papel',
-            kind:
-                ItemKind.Generic,
-        },
-        {
-            id: 'battery',
-            name: 'Pilha',
-            description:
-                'Talvez ainda tenha alguma carga.',
-            textureKey:
-                'sprite-pilha',
-            kind:
-                ItemKind.Generic,
-        },
-        {
-            id: 'food-can',
-            name: 'Lata de comida',
-            description:
-                'Uma lata fechada encontrada no internato.',
-            textureKey:
-                'sprite-comida',
-            kind:
-                ItemKind.Food,
-        },
-        {
-            id: 'number-six',
-            name: 'Número 6',
-            description:
-                'Um seis de metal, arrancado de alguma porta.',
-            textureKey:
-                'sprite-numero-6',
-            kind:
-                ItemKind.Number,
-            value: 6,
-        },
-        {
-            id: 'number-seven',
-            name: 'Número 7',
-            description:
-                'Um número que pode ser útil em algum puzzle.',
-            textureKey:
-                'sprite-numero-7',
-            kind:
-                ItemKind.Number,
-            value: 7,
-        },
-    ]
+// SAÍDA: a chave aparece perto da porta de saída depois da avaliação final.
+const PORTA_SAIDA: PuzzleDoorDefinition = {
+    id: 'porta-saida',
+    x: 486,
+    // topo da porta alinhado ao topo da parede de baixo (y = 692)
+    y: 692 + 29 / 2,
+    largura: 48,
+    altura: 29,
+    textureKey: 'porta-dupla-fechada',
+    condicao: { tipo: 'item', itemId: 'chave-saida' },
+    mensagemTrancada: 'Saída trancada. Precisa de uma chave.',
+    mensagemAbrir: 'Você destrancou a saída e escapou do internato!',
+}
 
+const CHAVE_SAIDA: ItemDefinition = {
+    id: 'chave-saida',
+    name: 'Chave da saída',
+    description: 'A chave que abre a porta de saída do internato.',
+    textureKey: 'sprite-chave',
+    kind: ItemKind.Generic,
+}
+
+// Recortes da porta dupla de madeira no Dungeon_Tileset.png
+const PORTA_DUPLA_FECHADA = { key: 'porta-dupla-fechada', x: 10, y: 595, w: 48, h: 29 }
+
+// Parede grossa na parte de baixo da sala da saída (mesma altura da porta)
+const PAREDE_SAIDA = { x: 340, y: 692, largura: 272, altura: 29 }
+const COR_PAREDE = 0x44342c
+const COR_PAREDE_TOPO = 0x5a463a
+const COR_PAREDE_BASE = 0x2a1f19
+
+const CHAVE_SAIDA_X = 486
+const CHAVE_SAIDA_Y = 664
+
+const COMIDA: ItemDefinition = {
+    id: 'food-can',
+    name: 'Lata de comida',
+    description:
+        'Uma lata fechada encontrada no internato.',
+    textureKey:
+        'sprite-comida',
+    kind:
+        ItemKind.Food,
+}
+
+// Cada área só tem as peças do puzzle que destranca a próxima.
+// Dígitos repetidos (1 e 3) nunca ficam acessíveis antes da hora,
+// para uma peça de um puzzle posterior não resolver um anterior.
 const ITENS_DOS_PUZZLES: readonly {
     readonly item: ItemDefinition
     readonly x: number
     readonly y: number
     readonly cor: number
 }[] = [
+    // SAGUÃO (início): peças do refeitório (13) e uma comida para aprender o Q
     {
-        item: {
-            id: 'biblioteca-numero-3',
-            name: 'Página 3',
-            description:
-                'Página 3 arrancada de um livro marcado da biblioteca.',
-            textureKey:
-                'sprite-numero-3',
-            kind: ItemKind.Number,
-            value: 3,
-        },
-        x: 516,
-        y: 324,
-        cor: 0xff7675,
-    },
-    {
-        item: {
-            id: 'biblioteca-numero-8',
-            name: 'Página 8',
-            description:
-                'Página 8 antiga com anotações e número destacado.',
-            textureKey:
-                'sprite-numero-8',
-            kind: ItemKind.Number,
-            value: 8,
-        },
-        x: 596,
-        y: 324,
-        cor: 0x74b9ff,
-    },
-    {
-        item: {
-            id: 'biblioteca-numero-1',
-            name: 'Página 1',
-            description:
-                'Página 1 marcada com o primeiro dígito do código.',
-            textureKey:
-                'sprite-numero-1',
-            kind: ItemKind.Number,
-            value: 1,
-        },
-        x: 596,
-        y: 372,
-        cor: 0xffeaa7,
+        item: COMIDA,
+        x: 372,
+        y: 604,
+        cor: 0xe67e22,
     },
     {
         item: {
@@ -387,8 +333,8 @@ const ITENS_DOS_PUZZLES: readonly {
             kind: ItemKind.Number,
             value: 1,
         },
-        x: 540,
-        y: 606,
+        x: 372,
+        y: 676,
         cor: 0xa29bfe,
     },
     {
@@ -402,40 +348,13 @@ const ITENS_DOS_PUZZLES: readonly {
             kind: ItemKind.Number,
             value: 3,
         },
-        x: 530,
-        y: 676,
+        x: 580,
+        y: 652,
         cor: 0x55efc4,
     },
-    {
-        item: {
-            id: 'sala1-numero-1',
-            name: 'Número 1',
-            description:
-                'Um um de giz, desenhado num caco de lousa.',
-            textureKey:
-                'sprite-numero-1',
-            kind: ItemKind.Number,
-            value: 1,
-        },
-        x: 300,
-        y: 520,
-        cor: 0xdfe6e9,
-    },
-    {
-        item: {
-            id: 'sala1-numero-9',
-            name: 'Número 9',
-            description:
-                'Um nove de giz, desenhado num caco de lousa.',
-            textureKey:
-                'sprite-numero-9',
-            kind: ItemKind.Number,
-            value: 9,
-        },
-        x: 450,
-        y: 515,
-        cor: 0x81ecec,
-    },
+
+    // REFEITÓRIO + SALA 2: peças da sala 2 (24), da porta da cozinha (6)
+    // e o 1 da porta da sala 1, longe da porta, perto de onde o Patágoras ronda
     {
         item: {
             id: 'sala2-numero-2',
@@ -462,19 +381,126 @@ const ITENS_DOS_PUZZLES: readonly {
             kind: ItemKind.Number,
             value: 4,
         },
-        x: 468,
-        y: 392,
+        x: 284,
+        y: 548,
         cor: 0xfdcb6e,
     },
-]
+    {
+        item: {
+            id: 'number-six',
+            name: 'Número 6',
+            description:
+                'Um seis de metal, arrancado de alguma porta.',
+            textureKey:
+                'sprite-numero-6',
+            kind: ItemKind.Number,
+            value: 6,
+        },
+        x: 468,
+        y: 330,
+        cor: 0x16a085,
+    },
+    {
+        item: {
+            id: 'sala1-numero-1',
+            name: 'Número 1',
+            description:
+                'Um um de giz, desenhado num caco de lousa.',
+            textureKey:
+                'sprite-numero-1',
+            kind: ItemKind.Number,
+            value: 1,
+        },
+        x: 580,
+        y: 548,
+        cor: 0xdfe6e9,
+    },
 
-const TEST_ITEM_COLORS = [
-    0x16a085,
-    0xf1c40f,
-    0xecf0f1,
-    0x9b59b6,
-    0xe67e22,
-    0x2ecc71,
+    // COZINHA: o 9 da porta da sala 1, comida extra e o 7 da avaliação
+    // final, que aparece cedo de propósito e só serve lá no fim
+    {
+        item: {
+            id: 'sala1-numero-9',
+            name: 'Número 9',
+            description:
+                'Um nove de giz, desenhado num caco de lousa.',
+            textureKey:
+                'sprite-numero-9',
+            kind: ItemKind.Number,
+            value: 9,
+        },
+        x: 164,
+        y: 548,
+        cor: 0x81ecec,
+    },
+    {
+        item: COMIDA,
+        x: 196,
+        y: 516,
+        cor: 0xe67e22,
+    },
+    {
+        item: {
+            id: 'avaliacao-numero-7',
+            name: 'Número 7',
+            description:
+                'Um sete escrito a caneta vermelha, rasgado de uma prova corrigida.',
+            textureKey:
+                'sprite-numero-7',
+            kind: ItemKind.Number,
+            value: 7,
+        },
+        x: 164,
+        y: 436,
+        cor: 0xe17055,
+    },
+
+    // SALA 1 + BIBLIOTECA (abrem juntas): páginas do armário (381)
+    {
+        item: {
+            id: 'biblioteca-numero-8',
+            name: 'Página 8',
+            description:
+                'Página 8 antiga com anotações e número destacado.',
+            textureKey:
+                'sprite-numero-8',
+            kind: ItemKind.Number,
+            value: 8,
+        },
+        x: 172,
+        y: 326,
+        cor: 0x74b9ff,
+    },
+    {
+        item: {
+            id: 'biblioteca-numero-3',
+            name: 'Página 3',
+            description:
+                'Página 3 arrancada de um livro marcado da biblioteca.',
+            textureKey:
+                'sprite-numero-3',
+            kind: ItemKind.Number,
+            value: 3,
+        },
+        x: 516,
+        y: 324,
+        cor: 0xff7675,
+    },
+    {
+        item: {
+            id: 'biblioteca-numero-1',
+            name: 'Página 1',
+            description:
+                'Página 1 marcada com o primeiro dígito do código.',
+            textureKey:
+                'sprite-numero-1',
+            kind: ItemKind.Number,
+            value: 1,
+        },
+        x: 716,
+        y: 388,
+        cor: 0xffeaa7,
+    },
 ]
 
 export class GameScene
@@ -500,6 +526,9 @@ export class GameScene
 
     private foodThrow!:
         FoodThrowSystem
+
+    /** Enquanto true, a escuridão segue a câmera (revelação da chave). */
+    private revelandoChave = false
 
     private escuridao!:
         Phaser.GameObjects.Image
@@ -1156,13 +1185,6 @@ export class GameScene
                 },
             )
 
-        this.puzzles
-            .adicionarGatilho(
-                PUZZLE_TESTE_X,
-                PUZZLE_TESTE_Y,
-                'teste',
-            )
-
         // GATILHOS DA BIBLIOTECA
         this.puzzles
             .adicionarGatilho(
@@ -1178,18 +1200,13 @@ export class GameScene
                 'biblioteca-senha',
             )
 
-        this.puzzles
-            .adicionarGatilho(
-                692,
-                340,
-                'diretor',
-            )
 
         this.criarPortas(
             map,
             mapOriginX - refX,
             mapOriginY - refY,
         )
+
 
 
         // PUZZLE DENTRO DA SALA 2 (LIBERA A PORTA DA COZINHA)
@@ -1210,9 +1227,6 @@ export class GameScene
                 this.inventory,
                 this.collision,
             )
-        // ITENS DE TESTE
-        this.spawnTestPickups()
-
         this.spawnItensDosPuzzles()
 
         this.atualizarVisibilidadeSala(true)
@@ -1496,10 +1510,15 @@ export class GameScene
         this.patagorasAI.update()
         this.patagoras.updateAnimation()
 
-        this.escuridao.setPosition(
-            this.player.x,
-            this.player.y,
-        )
+        if (this.revelandoChave) {
+            const centro = this.cameras.main.midPoint
+            this.escuridao.setPosition(centro.x, centro.y)
+        } else {
+            this.escuridao.setPosition(
+                this.player.x,
+                this.player.y,
+            )
+        }
 
         // ATUALIZA QUAL ITEM ESTÁ
         // MAIS PRÓXIMO DO PLAYER
@@ -1854,24 +1873,6 @@ export class GameScene
             20,
             20,
             0xe74c3c,
-        )
-
-        TEST_ITEMS.forEach(
-            (
-                item,
-                index,
-            ) => {
-                if (!this.textures.exists(item.textureKey)) this.createSolidTexture(
-                    item.textureKey,
-                    26,
-                    26,
-                    TEST_ITEM_COLORS[
-                    index %
-                    TEST_ITEM_COLORS
-                        .length
-                    ],
-                )
-            },
         )
     }
 
@@ -2266,6 +2267,7 @@ export class GameScene
                 altura: dados.altura,
             }
         }
+        this.criarTexturasPortaDupla()
 
         this.doorSystem =
             new PuzzleDoorSystem(
@@ -2446,6 +2448,134 @@ export class GameScene
                 dados.largura,
                 dados.altura,
             )
+
+        // PORTA DA DIRETORIA (SALA DA AVALIAÇÃO FINAL):
+        // só destranca depois do armário da biblioteca.
+        const portaDiretoria =
+            this.doorSystem
+                .adicionarPorta({
+                    id: PORTA_DIRETORIA_ID,
+                    x: 604,
+                    y: 484,
+                    largura: 16,
+                    altura: 32,
+                    condicao: {
+                        tipo: 'callback',
+                        fn: () =>
+                            this.puzzles
+                                .estado('biblioteca-senha') ===
+                            PuzzleEstado.Resolvido,
+                    },
+                    mensagemTrancada: 'Diretoria trancada',
+                    mensagemAbrir: 'A diretoria foi destrancada.',
+                })
+        registrarObstaculoPorta(portaDiretoria)
+
+        // PORTA DA AVALIAÇÃO FINAL (corredor dentro da diretoria,
+        // marcada no mapa como "porta-secreta"): a própria porta é o
+        // puzzle 'avaliacao-final' (3x + 4 = 25).
+        const portaAvaliacao =
+            this.doorSystem
+                .adicionarPorta({
+                    id: PORTA_AVALIACAO_ID,
+                    x: 668,
+                    y: 524,
+                    largura: 48,
+                    altura: 29,
+                    textureKey: PORTA_DUPLA_FECHADA.key,
+                    condicao: {
+                        tipo: 'puzzle',
+                        puzzleId: 'avaliacao-final',
+                    },
+                })
+        registrarObstaculoPorta(portaAvaliacao)
+
+        this.criarParedeSaida()
+
+        const portaSaida =
+            this.doorSystem.adicionarPorta(PORTA_SAIDA)
+        registrarObstaculoPorta(portaSaida)
+
+        portaSaida.on(DOOR_EVENTS.UNLOCKED, () => {
+            if (PORTA_SAIDA.mensagemAbrir) {
+                this.mostrarStatus(PORTA_SAIDA.mensagemAbrir)
+            }
+
+            // Mostra a porta abrindo e depois o modal de vitória
+            this.time.delayedCall(700, () => {
+                this.scene.launch('VitoriaScene')
+                this.scene.pause()
+            })
+        })
+    }
+
+    /** Desenha a parede grossa onde fica a porta de saída. */
+    private criarParedeSaida(): void {
+        const { x, y, largura, altura } = PAREDE_SAIDA
+        this.add
+            .graphics()
+            .setDepth(4) // acima do mapa, abaixo da porta (5)
+            .fillStyle(COR_PAREDE)
+            .fillRect(x, y, largura, altura)
+            .fillStyle(COR_PAREDE_TOPO)
+            .fillRect(x, y, largura, 2)
+            .fillStyle(COR_PAREDE_BASE)
+            .fillRect(x, y + altura - 3, largura, 3)
+    }
+
+    /** Recorta a porta dupla fechada do Dungeon_Tileset. */
+    private criarTexturasPortaDupla(): void {
+        const fonte = this.textures
+            .get('dungeon-tileset')
+            .getSourceImage() as HTMLImageElement
+
+        for (const recorte of [PORTA_DUPLA_FECHADA]) {
+            if (this.textures.exists(recorte.key)) continue
+            const canvas = this.textures.createCanvas(
+                recorte.key,
+                recorte.w,
+                recorte.h,
+            )!
+            canvas.context.imageSmoothingEnabled = false
+            canvas.context.drawImage(
+                fonte,
+                recorte.x, recorte.y, recorte.w, recorte.h,
+                0, 0, recorte.w, recorte.h,
+            )
+            canvas.refresh()
+        }
+    }
+
+    /**
+     * Faz a chave da saída aparecer e leva a câmera até ela,
+     * voltando para o jogador em seguida. O jogo fica pausado
+     * durante a animação para o Patágoras não atacar.
+     */
+    private revelarChaveSaida(): void {
+        this.collision.spawnPickup(
+            CHAVE_SAIDA_X,
+            CHAVE_SAIDA_Y,
+            CHAVE_SAIDA,
+        )
+
+        const camera = this.cameras.main
+        const IDA_MS = 900
+        const PAUSA_MS = 1200
+        const VOLTA_MS = 700
+
+        this.revelandoChave = true
+        this.physics.pause()
+        camera.stopFollow()
+        camera.pan(CHAVE_SAIDA_X, CHAVE_SAIDA_Y, IDA_MS, 'Sine.easeInOut')
+
+        this.time.delayedCall(IDA_MS + PAUSA_MS, () => {
+            camera.pan(this.player.x, this.player.y, VOLTA_MS, 'Sine.easeInOut')
+
+            this.time.delayedCall(VOLTA_MS, () => {
+                camera.startFollow(this.player, true, 0.2, 0.2)
+                this.physics.resume()
+                this.revelandoChave = false
+            })
         })
     }
 
@@ -2518,56 +2648,6 @@ export class GameScene
                         entrada.x,
                         entrada.y,
                         entrada.item,
-                    )
-            },
-        )
-    }
-
-    private spawnTestPickups():
-        void {
-
-        const positions = [
-            {
-                x: 350,
-                y: 460,
-            },
-            {
-                x: 450,
-                y: 460,
-            },
-            {
-                x: 400,
-                y: 500,
-            },
-            {
-                x: 480,
-                y: 480,
-            },
-            {
-                x: 430,
-                y: 430,
-            },
-            {
-                x: 380,
-                y: 440,
-            },
-        ]
-
-        positions.forEach(
-            (
-                position,
-                index,
-            ) => {
-                this.collision
-                    .spawnPickup(
-                        position.x,
-                        position.y,
-
-                        TEST_ITEMS[
-                        index %
-                        TEST_ITEMS
-                            .length
-                        ],
                     )
             },
         )
@@ -2770,6 +2850,16 @@ export class GameScene
                     }
                 }
 
+                // AVALIAÇÃO FINAL: abre a porta e revela a chave da saída
+                if (puzzleId === 'avaliacao-final') {
+                    this.abrirPorta(puzzleId)
+                    this.mostrarStatus(
+                        'Avaliação final concluída! Uma chave apareceu perto da saída.',
+                    )
+                    this.revelarChaveSaida()
+                    return
+                }
+
                 if (
                     this.abrirPorta(
                         puzzleId,
@@ -2785,16 +2875,14 @@ export class GameScene
                     return
                 }
 
-                if (puzzleId === 'diretor') {
-                    this.mostrarStatus(
-                        'Documento lido: Você descobriu os acontecimentos do incidente!',
-                    )
-                    return
-                }
-
                 if (puzzleId === 'biblioteca-senha') {
+                    const portaDiretoria =
+                        this.doorSystem.getPorta(PORTA_DIRETORIA_ID)
+                    if (portaDiretoria?.isLocked) {
+                        portaDiretoria.unlock()
+                    }
                     this.mostrarStatus(
-                        'Armário destrancado! Você encontrou os documentos confidenciais do Diretor.',
+                        'Armário destrancado! A diretoria foi aberta.',
                     )
                     return
                 }

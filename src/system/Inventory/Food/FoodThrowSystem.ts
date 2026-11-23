@@ -265,8 +265,10 @@ export class FoodThrowSystem
             Phaser.Physics.Arcade.Body
 
         body.setSize(
-            14,
-            14,
+            FOOD_THROW_CONFIG
+                .projectileHitbox,
+            FOOD_THROW_CONFIG
+                .projectileHitbox,
             true,
         )
 
