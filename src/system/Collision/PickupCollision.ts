@@ -127,6 +127,15 @@ export class PickupCollision
     return this.radius
   }
 
+  getPickups():
+    readonly Pickup[] {
+    if (!this.group.children) {
+      return []
+    }
+
+    return this.group.getChildren() as Pickup[]
+  }
+
   update(): void {
     const next =
       this.findNearestInRange()

@@ -82,7 +82,13 @@ export class PuzzleDoor extends Phaser.Physics.Arcade.Sprite {
         def.corBorda ?? COR_BORDA_PADRAO,
       )
 
-    super(scene, def.x, def.y, textureKey)
+    super(
+      scene,
+      def.x,
+      def.y,
+      textureKey,
+      def.textureKey ? (def.closeFrame ?? 0) : undefined,
+    )
 
     this.podeFechar = def.podeFechar ?? false
 
@@ -92,11 +98,23 @@ export class PuzzleDoor extends Phaser.Physics.Arcade.Sprite {
     scene.physics.add.existing(this, true /* isStatic */)
 
     this.setDepth(depth)
-    this.setDisplaySize(def.largura, def.altura)
+    if (def.originY !== undefined) {
+      this.setOrigin(0.5, def.originY)
+    }
 
     const staticBody = this.body as Phaser.Physics.Arcade.StaticBody
-    staticBody.setSize(def.largura, def.altura)
-    staticBody.updateFromGameObject()
+    if (def.manterEscalaNativa) {
+      staticBody.setSize(def.largura, def.altura)
+      staticBody.position.set(
+        def.x - def.largura / 2,
+        def.y - def.altura / 2,
+      )
+      staticBody.updateCenter()
+    } else {
+      this.setDisplaySize(def.largura, def.altura)
+      staticBody.setSize(def.largura, def.altura)
+      staticBody.updateFromGameObject()
+    }
 
     // ---------- Zona de Interação ----------
     const zoneW = def.largura + ZONA_INTERACAO_PADDING * 2

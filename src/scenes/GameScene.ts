@@ -142,6 +142,80 @@ const PICKUP_RADIUS = PLAYER_CONFIG.interactionRadius
 const SPAWN_JOGADOR_X = 470
 const SPAWN_JOGADOR_Y = 600
 
+const PUZZLE_TESTE_X = 480
+const PUZZLE_TESTE_Y = 660
+
+const PORTA_SPRITESHEETS: readonly {
+    readonly key: string
+    readonly path: string
+    readonly frameWidth: number
+    readonly frameHeight: number
+}[] = [
+    {
+        key: 'porta-biblioteca',
+        path: 'assets/tilesets/portabiblioteca.png',
+        frameWidth: 32,
+        frameHeight: 32,
+    },
+    {
+        key: 'porta_cozinha',
+        path: 'assets/tilesets/portadacozinha.png',
+        frameWidth: 32,
+        frameHeight: 32,
+    },
+    {
+        key: 'porta-diretoria',
+        path: 'assets/tilesets/portadiretoria.png',
+        frameWidth: 32,
+        frameHeight: 32,
+    },
+    {
+        key: 'porta-secreta',
+        path: 'assets/tilesets/portaesconderijo.png',
+        frameWidth: 48,
+        frameHeight: 16,
+    },
+    {
+        key: 'porta-tutorial',
+        path: 'assets/tilesets/portarefeitorio.png',
+        frameWidth: 48,
+        frameHeight: 48,
+    },
+    {
+        key: 'porta_sala_1',
+        path: 'assets/tilesets/portassala1.png',
+        frameWidth: 32,
+        frameHeight: 32,
+    },
+    {
+        key: 'porta_sala_2',
+        path: 'assets/tilesets/portassala2.png',
+        frameWidth: 32,
+        frameHeight: 32,
+    },
+]
+
+const PORTA_TEXTURA_POR_ID: Readonly<Record<string, string>> = {
+    'porta-biblioteca': 'porta-biblioteca',
+    'porta_cozinha': 'porta_cozinha',
+    'porta-cozinha': 'porta_cozinha',
+    'porta-diretoria': 'porta-diretoria',
+    'porta-secreta': 'porta-secreta',
+    'porta-tutorial': 'porta-tutorial',
+    'porta-refeitorio': 'porta-tutorial',
+    'porta_sala_1': 'porta_sala_1',
+    'porta-sala-aula-1': 'porta_sala_1',
+    'porta_sala_2': 'porta_sala_2',
+    'porta-sala-aula-2': 'porta_sala_2',
+}
+
+const PORTA_OBJETO_TILED_POR_ID: Readonly<Record<string, string>> = {
+    'porta-refeitorio': 'porta-tutorial',
+    'porta-cozinha': 'porta_cozinha',
+    'porta-sala-aula-1': 'porta_sala_1',
+    'porta-biblioteca': 'porta-biblioteca',
+}
+
 const PORTAS: readonly PuzzleDoorDefinition[] = [
     {
         id: 'porta-refeitorio',
@@ -151,6 +225,11 @@ const PORTAS: readonly PuzzleDoorDefinition[] = [
         altura: 32,
         condicao: { tipo: 'puzzle', puzzleId: 'refeitorio' },
         mensagemAbrir: 'O refeitório foi destrancado.',
+        textureKey: PORTA_TEXTURA_POR_ID['porta-refeitorio'],
+        closeFrame: 0,
+        openFrame: 1,
+        manterEscalaNativa: true,
+        originY: 2 / 3,
     },
     {
         id: 'porta-cozinha',
@@ -160,6 +239,9 @@ const PORTAS: readonly PuzzleDoorDefinition[] = [
         altura: 32,
         condicao: { tipo: 'puzzle', puzzleId: 'entrada-cozinha' },
         mensagemAbrir: 'A cozinha foi destrancada.',
+        textureKey: PORTA_TEXTURA_POR_ID['porta-cozinha'],
+        closeFrame: 0,
+        openFrame: 1,
     },
     {
         id: 'porta-sala-aula-1',
@@ -169,6 +251,9 @@ const PORTAS: readonly PuzzleDoorDefinition[] = [
         altura: 16,
         condicao: { tipo: 'puzzle', puzzleId: 'sala-aula-1' },
         mensagemAbrir: 'A sala de aula 1 e a biblioteca foram destrancadas!',
+        textureKey: PORTA_TEXTURA_POR_ID['porta-sala-aula-1'],
+        closeFrame: 0,
+        openFrame: 1,
     },
     ]
 
@@ -509,8 +594,21 @@ export class GameScene
     private pickupRadiusDebug!:
         Phaser.GameObjects.Graphics
 
-    private layersParedesInvisiveis:
+    private layersMoveisInvisiveis:
         Phaser.Tilemaps.TilemapLayer[] = []
+
+    private salasLayers =
+        new Map<string, Phaser.Tilemaps.TilemapLayer[]>()
+
+    private salasChao =
+        new Map<string, Phaser.Tilemaps.TilemapLayer>()
+
+    private portasVisuais: {
+        readonly sprite: Phaser.GameObjects.Sprite
+        readonly salas: ReadonlySet<string>
+    }[] = []
+
+    private salaAtual: string | null = null
 
     private hiddenTiles:
         Phaser.Tilemaps.Tile[] = []
@@ -567,6 +665,17 @@ export class GameScene
             'mobilha3',
             'assets/tilesets/mobilha3.png',
         )
+
+        for (const portaSheet of PORTA_SPRITESHEETS) {
+            this.load.spritesheet(
+                portaSheet.key,
+                portaSheet.path,
+                {
+                    frameWidth: portaSheet.frameWidth,
+                    frameHeight: portaSheet.frameHeight,
+                },
+            )
+        }
 
         this.load.tilemapTiledJSON(
             'mapa-principal',
@@ -701,8 +810,11 @@ export class GameScene
         const refX = refLayerData ? refLayerData.x : 0
         const refY = refLayerData ? refLayerData.y : 0
 
-        this.layersParedesInvisiveis = []
-        const layersParedes: Phaser.Tilemaps.TilemapLayer[] = []
+        this.layersMoveisInvisiveis = []
+        this.salasLayers.clear()
+        this.salasChao.clear()
+        this.portasVisuais = []
+        this.salaAtual = null
         let layerColisao: Phaser.Tilemaps.TilemapLayer | null = null
 
         for (const layerData of map.layers) {
@@ -734,25 +846,36 @@ export class GameScene
 
             layer.setVisible(true)
 
+            const barraIdx = nome.indexOf('/')
+            if (barraIdx > 0) {
+                const nomeSala = nome.slice(0, barraIdx)
+                let grupoLayers = this.salasLayers.get(nomeSala)
+                if (!grupoLayers) {
+                    grupoLayers = []
+                    this.salasLayers.set(nomeSala, grupoLayers)
+                }
+                grupoLayers.push(layer)
+
+                if (nomeLower.includes('mapa bruto')) {
+                    this.salasChao.set(nomeSala, layer)
+                }
+            }
+
             if (nomeLower.includes('mapa bruto')) {
                 layer.setDepth(0)
             } else if (nomeLower.includes('detalhes de solo')) {
                 layer.setDepth(1)
             } else if (nomeLower.includes('paredes 2')) {
                 layer.setDepth(3)
-                layersParedes.push(layer)
             } else if (nomeLower.includes('paredes invisiveis')) {
                 layer.setDepth(10)
-                this.layersParedesInvisiveis.push(layer)
             } else if (nomeLower.includes('paredes')) {
                 layer.setDepth(2)
-                layersParedes.push(layer)
             } else if (nomeLower.includes('mobilha invisivel')) {
                 layer.setDepth(10)
-                this.layersParedesInvisiveis.push(layer)
+                this.layersMoveisInvisiveis.push(layer)
             } else if (nomeLower.includes('mobilha por cima da parede')) {
                 layer.setDepth(11)
-                this.layersParedesInvisiveis.push(layer)
             } else if (nomeLower.includes('mobilha')) {
                 layer.setDepth(4)
             } else if (nomeLower.includes('props')) {
@@ -769,7 +892,7 @@ export class GameScene
             )
         this.player
             .setScale(PLAYER_CONFIG.scale)
-            .setDepth(5)
+            .setDepth(20)
         // Hitbox na base/pés (10x8) separada das dimensões visuais do frame 24x24 (offset 7, 16)
         this.player.setSize(
             PLAYER_CONFIG.bodyWidth,
@@ -963,20 +1086,27 @@ export class GameScene
                 },
             )
 
-        // PAREDES DO MAPA COM COLISÃO (usa a camada 'colisao' do Tiled)
-        const hasCustomCollision =
-            layerColisao &&
-            layerColisao.filterTiles((t: Phaser.Tilemaps.Tile) => t.index > 0).length > 0
+        // COLISÕES DO MAPA (usa apenas as camadas 'colisao' e 'colisao moveis' do Tiled)
+        const wallRects = layerColisao
+            ? this.extractWallRects([layerColisao])
+            : []
 
-        const wallRects =
-            this.extractWallRects(
-                hasCustomCollision
-                    ? [layerColisao] : layersParedes,
+        const furnitureRects =
+            this.extractObjectLayerRects(
+                map,
+                'colisao moveis',
+                mapOriginX - refX,
+                mapOriginY - refY,
             )
+
+        const collisionRects: readonly WorldRect[] = [
+            ...wallRects,
+            ...furnitureRects,
+        ]
 
         this.collision
             .buildWalls(
-                wallRects,
+                collisionRects,
             )
             .bindActor(
                 this.player,
@@ -993,7 +1123,7 @@ export class GameScene
                 WORLD_WIDTH,
                 WORLD_HEIGHT,
                 16,
-                wallRects,
+                collisionRects,
                 PATAGORAS_CONFIG
                     .pathfindingPadding,
             )
@@ -1071,7 +1201,11 @@ export class GameScene
             )
 
 
-        this.criarPortas()
+        this.criarPortas(
+            map,
+            mapOriginX - refX,
+            mapOriginY - refY,
+        )
 
 
 
@@ -1094,6 +1228,8 @@ export class GameScene
                 this.collision,
             )
         this.spawnItensDosPuzzles()
+
+        this.atualizarVisibilidadeSala(true)
 
         // LIMITES DA CÂMERA
         this.cameras.main
@@ -1458,15 +1594,20 @@ export class GameScene
 
         this.updatePickupRadiusDebug()
 
-        if (this.layersParedesInvisiveis.length > 0) {
-            // Restaura as paredes que deixaram de cobrir o personagem
+        this.atualizarVisibilidadeSala()
+
+        if (this.layersMoveisInvisiveis.length > 0) {
+            // Restaura os móveis que deixaram de cobrir o personagem
             for (const tile of this.hiddenTiles) {
                 tile.alpha = 1
             }
             this.hiddenTiles = []
 
-            // Pega apenas os blocos de paredes invisíveis que estão sobre o personagem
-            for (const layerInvisivel of this.layersParedesInvisiveis) {
+            // Pega apenas os blocos de móveis invisíveis que estão sobre o personagem
+            for (const layerInvisivel of this.layersMoveisInvisiveis) {
+                if (!layerInvisivel.visible) {
+                    continue
+                }
                 const overlappingTiles =
                     layerInvisivel.getTilesWithinWorldXY(
                         this.player.x - 6,
@@ -1478,7 +1619,7 @@ export class GameScene
 
                 for (const tile of overlappingTiles) {
                     if (tile && tile.index > 0) {
-                        tile.alpha = 0 // Apenas esta parede do player fica invisível!
+                        tile.alpha = 0 // Apenas este móvel sobre o player fica invisível!
                         this.hiddenTiles.push(tile)
                     }
                 }
@@ -1502,6 +1643,107 @@ export class GameScene
             this.solidObstaclesDirty = false
         }
         return this.solidObstaclesCache
+    }
+
+    private descobrirSala(
+        x: number,
+        y: number,
+        preferencia?: string | null,
+    ): string | null {
+        if (preferencia) {
+            const chaoPreferido = this.salasChao.get(preferencia)
+            const tile = chaoPreferido?.getTileAtWorldXY(x, y)
+            if (tile && tile.index > 0) {
+                return preferencia
+            }
+        }
+
+        for (const [sala, chaoLayer] of this.salasChao) {
+            if (sala === preferencia) {
+                continue
+            }
+            const tile = chaoLayer.getTileAtWorldXY(x, y)
+            if (tile && tile.index > 0) {
+                return sala
+            }
+        }
+
+        return null
+    }
+
+    private atualizarVisibilidadeSala(forcar = false): void {
+        if (this.salasChao.size === 0) {
+            return
+        }
+
+        const playerBody =
+            this.player.body as Phaser.Physics.Arcade.Body | null
+        const px = playerBody ? playerBody.center.x : this.player.x
+        const py = playerBody ? playerBody.center.y : this.player.y
+
+        const novaSala = this.descobrirSala(px, py, this.salaAtual)
+        const trocouSala =
+            novaSala !== null && novaSala !== this.salaAtual
+
+        if (trocouSala) {
+            this.salaAtual = novaSala
+        }
+
+        if (this.salaAtual && (trocouSala || forcar)) {
+            for (const [sala, layers] of this.salasLayers) {
+                const visivel = sala === this.salaAtual
+                for (const layer of layers) {
+                    layer.setVisible(visivel)
+                }
+            }
+
+            for (const pickup of this.collision.pickups.getPickups()) {
+                if (!pickup.active) {
+                    continue
+                }
+                const salaItem = this.descobrirSala(
+                    pickup.x,
+                    pickup.y,
+                    this.salaAtual,
+                )
+                pickup.setVisible(
+                    salaItem === null || salaItem === this.salaAtual,
+                )
+            }
+
+            for (const portaVisual of this.portasVisuais) {
+                if (!portaVisual.sprite.active) {
+                    continue
+                }
+                portaVisual.sprite.setVisible(
+                    portaVisual.salas.size === 0 ||
+                        portaVisual.salas.has(this.salaAtual),
+                )
+            }
+        }
+
+        if (this.salaAtual && this.patagoras?.sprite) {
+            const patoBody =
+                this.patagoras.sprite.body as
+                    | Phaser.Physics.Arcade.Body
+                    | null
+            const patoX = patoBody
+                ? patoBody.center.x
+                : this.patagoras.sprite.x
+            const patoY = patoBody
+                ? patoBody.center.y
+                : this.patagoras.sprite.y
+            const salaPato = this.descobrirSala(
+                patoX,
+                patoY,
+                this.salaAtual,
+            )
+            if (salaPato !== null) {
+                this.patagoras.sprite.setVisible(
+                    salaPato === this.salaAtual,
+                )
+            }
+        }
     }
 
     private criarEscuridao(): void {
@@ -1767,9 +2009,264 @@ export class GameScene
         return mergedRects
     }
 
-    private criarPortas():
+    private extractObjectLayerRects(
+        map: Phaser.Tilemaps.Tilemap,
+        layerName: string,
+        offsetX: number,
+        offsetY: number,
+    ): readonly WorldRect[] {
+        const objectLayer = map.objects.find(
+            (layer) =>
+                layer.name.toLowerCase() ===
+                layerName.toLowerCase(),
+        )
+
+        if (!objectLayer) {
+            return []
+        }
+
+        const rects: WorldRect[] = []
+
+        for (const obj of objectLayer.objects) {
+            if (obj.point || obj.visible === false) {
+                continue
+            }
+
+            const baseX = (obj.x ?? 0) + offsetX
+            const baseY = (obj.y ?? 0) + offsetY
+
+            if (obj.polygon && obj.polygon.length >= 3) {
+                const points = obj.polygon.map((p) => ({
+                    x: baseX + p.x,
+                    y: baseY + p.y,
+                }))
+
+                rects.push(
+                    ...this.polygonToRects(points),
+                )
+                continue
+            }
+
+            const width = obj.width ?? 0
+            const height = obj.height ?? 0
+
+            if (width >= 1 || height >= 1) {
+                const minThickness = 2
+                const rectW = Math.max(width, minThickness)
+                const rectH = Math.max(height, minThickness)
+                const rectX =
+                    width < minThickness
+                        ? baseX - (rectW - width) / 2
+                        : baseX
+                const rectY =
+                    height < minThickness
+                        ? baseY - (rectH - height) / 2
+                        : baseY
+
+                rects.push({
+                    x: rectX,
+                    y: rectY,
+                    width: rectW,
+                    height: rectH,
+                })
+            }
+        }
+
+        return rects
+    }
+
+    private polygonToRects(
+        points: readonly { x: number; y: number }[],
+    ): readonly WorldRect[] {
+        let minX = Infinity
+        let maxX = -Infinity
+        let minY = Infinity
+        let maxY = -Infinity
+        let area2 = 0
+
+        for (let i = 0; i < points.length; i++) {
+            const p1 = points[i]
+            const p2 = points[(i + 1) % points.length]
+            if (p1.x < minX) minX = p1.x
+            if (p1.x > maxX) maxX = p1.x
+            if (p1.y < minY) minY = p1.y
+            if (p1.y > maxY) maxY = p1.y
+            area2 += p1.x * p2.y - p2.x * p1.y
+        }
+
+        const bboxW = maxX - minX
+        const bboxH = maxY - minY
+        if (bboxW < 1 && bboxH < 1) {
+            return []
+        }
+
+        const minThickness = 2
+        const fillRatio =
+            bboxW * bboxH > 0
+                ? Math.abs(area2) / 2 / (bboxW * bboxH)
+                : 1
+
+        // Polígonos quase retangulares (ou muito finos) viram um único retângulo
+        if (
+            fillRatio >= 0.85 ||
+            bboxW < minThickness ||
+            bboxH < minThickness
+        ) {
+            const rectW = Math.max(bboxW, minThickness)
+            const rectH = Math.max(bboxH, minThickness)
+            return [{
+                x: bboxW < minThickness ? minX - (rectW - bboxW) / 2 : minX,
+                y: bboxH < minThickness ? minY - (rectH - bboxH) / 2 : minY,
+                width: rectW,
+                height: rectH,
+            }]
+        }
+
+        // Polígonos em L / côncavos são decompostos em faixas horizontais
+        // usando as coordenadas Y dos próprios vértices para não pular partes finas
+        const sortedYs = Array.from(
+            new Set(points.map((p) => p.y)),
+        ).sort((a, b) => a - b)
+
+        const rawStrips: WorldRect[] = []
+
+        for (let b = 0; b + 1 < sortedYs.length; b++) {
+            const yTop = sortedYs[b]
+            const yBot = sortedYs[b + 1]
+            const bandH = yBot - yTop
+            if (bandH <= 0.01) {
+                continue
+            }
+
+            const sampleY = (yTop + yBot) / 2
+            const intersections: number[] = []
+
+            for (let i = 0; i < points.length; i++) {
+                const a = points[i]
+                const bPt = points[(i + 1) % points.length]
+                if (
+                    (a.y <= sampleY && bPt.y > sampleY) ||
+                    (bPt.y <= sampleY && a.y > sampleY)
+                ) {
+                    const t = (sampleY - a.y) / (bPt.y - a.y)
+                    intersections.push(
+                        a.x + t * (bPt.x - a.x),
+                    )
+                }
+            }
+
+            intersections.sort((a, bVal) => a - bVal)
+
+            for (let i = 0; i + 1 < intersections.length; i += 2) {
+                const x1 = intersections[i]
+                const x2 = intersections[i + 1]
+                const w = x2 - x1
+                if (w >= 1) {
+                    rawStrips.push({
+                        x: x1,
+                        y: yTop,
+                        width: w,
+                        height: bandH,
+                    })
+                }
+            }
+        }
+
+        // Mescla faixas verticais adjacentes com mesma largura e posição X
+        const merged: WorldRect[] = []
+        for (const strip of rawStrips) {
+            const match = merged.find(
+                (r) =>
+                    Math.abs(r.x - strip.x) < 1.5 &&
+                    Math.abs(r.width - strip.width) < 1.5 &&
+                    Math.abs(r.y + r.height - strip.y) < 0.5,
+            )
+            if (match) {
+                const idx = merged.indexOf(match)
+                merged[idx] = {
+                    x: Math.min(match.x, strip.x),
+                    y: match.y,
+                    width: Math.max(match.width, strip.width),
+                    height: match.height + strip.height,
+                }
+            } else {
+                merged.push(strip)
+            }
+        }
+
+        const ensured = merged.map((r) => {
+            if (r.height >= minThickness) {
+                return r
+            }
+            return {
+                x: r.x,
+                y: r.y - (minThickness - r.height) / 2,
+                width: r.width,
+                height: minThickness,
+            }
+        })
+
+        return ensured.length > 0
+            ? ensured
+            : [{
+                x: minX,
+                y: minY,
+                width: Math.max(bboxW, minThickness),
+                height: Math.max(bboxH, minThickness),
+            }]
+    }
+
+    private criarPortas(
+        map: Phaser.Tilemaps.Tilemap,
+        offsetX: number,
+        offsetY: number,
+    ):
         void {
 
+        const objectLayerPortas = map.objects.find(
+            (layer) => layer.name.toLowerCase() === 'portas',
+        )
+
+        const portasTiled = new Map<
+            string,
+            { x: number; y: number; largura: number; altura: number }
+        >()
+
+        if (objectLayerPortas) {
+            for (const obj of objectLayerPortas.objects) {
+                const nome = obj.name?.trim()
+                const largura = Math.round(obj.width ?? 0)
+                const altura = Math.round(obj.height ?? 0)
+                if (!nome || largura < 1 || altura < 1) {
+                    continue
+                }
+                const wx = (obj.x ?? 0) + offsetX
+                const wy = (obj.y ?? 0) + offsetY
+                portasTiled.set(nome, {
+                    x: Math.round(wx + (obj.width ?? 0) / 2),
+                    y: Math.round(wy + (obj.height ?? 0) / 2),
+                    largura,
+                    altura,
+                })
+            }
+        }
+
+        const aplicarPosicaoTiled = (
+            def: PuzzleDoorDefinition,
+        ): PuzzleDoorDefinition => {
+            const nomeTiled = PORTA_OBJETO_TILED_POR_ID[def.id] ?? def.id
+            const dados = portasTiled.get(nomeTiled)
+            if (!dados) {
+                return def
+            }
+            return {
+                ...def,
+                x: dados.x,
+                y: dados.y,
+                largura: dados.largura,
+                altura: dados.altura,
+            }
+        }
         this.criarTexturasPortaDupla()
 
         this.doorSystem =
@@ -1844,39 +2341,113 @@ export class GameScene
             )
         }
 
+        const registrarPortaVisual = (
+            sprite: Phaser.GameObjects.Sprite,
+            x: number,
+            y: number,
+            largura: number,
+            altura: number,
+        ): void => {
+            const salas = new Set<string>()
+            const margem = 8
+            const pontos = [
+                [x, y],
+                [x, y - altura / 2 - margem],
+                [x, y + altura / 2 + margem],
+                [x - largura / 2 - margem, y],
+                [x + largura / 2 + margem, y],
+            ]
+
+            for (const [px, py] of pontos) {
+                for (const [sala, chaoLayer] of this.salasChao) {
+                    const tile = chaoLayer.getTileAtWorldXY(px, py)
+                    if (tile && tile.index > 0) {
+                        salas.add(sala)
+                    }
+                }
+            }
+
+            this.portasVisuais.push({ sprite, salas })
+        }
+
+        const nomesPortasComSistema = new Set<string>()
+
         PORTAS.forEach(
             (def) => {
+                const defFinal = aplicarPosicaoTiled(def)
+                const nomeTiled = PORTA_OBJETO_TILED_POR_ID[def.id] ?? def.id
+                nomesPortasComSistema.add(nomeTiled)
                 const porta =
                     this.doorSystem
                         .adicionarPorta(
-                            def,
+                            defFinal,
                         )
                 registrarObstaculoPorta(porta)
+                registrarPortaVisual(
+                    porta,
+                    defFinal.x,
+                    defFinal.y,
+                    defFinal.largura,
+                    defFinal.altura,
+                )
             },
         )
 
         // PORTA DA BIBLIOTECA: só destranca depois do puzzle da sala 1.
         // Usa callback (e não puzzleId) porque o puzzle da sala 1 já
         // está vinculado à porta da própria sala 1.
+        nomesPortasComSistema.add(PORTA_BIBLIOTECA_ID)
+        const defBiblioteca = aplicarPosicaoTiled({
+            id: PORTA_BIBLIOTECA_ID,
+            x: 564,
+            y: 412,
+            largura: 32,
+            altura: 16,
+            condicao: {
+                tipo: 'callback',
+                fn: () =>
+                    this.puzzles
+                        .estado('sala-aula-1') ===
+                    PuzzleEstado.Resolvido,
+            },
+            mensagemTrancada: 'Biblioteca trancada',
+            mensagemAbrir: 'A biblioteca foi destrancada.',
+            textureKey: PORTA_TEXTURA_POR_ID[PORTA_BIBLIOTECA_ID],
+            closeFrame: 0,
+            openFrame: 1,
+        })
         const portaBiblioteca =
             this.doorSystem
-                .adicionarPorta({
-                    id: PORTA_BIBLIOTECA_ID,
-                    x: 564,
-                    y: 412,
-                    largura: 32,
-                    altura: 16,
-                    condicao: {
-                        tipo: 'callback',
-                        fn: () =>
-                            this.puzzles
-                                .estado('sala-aula-1') ===
-                            PuzzleEstado.Resolvido,
-                    },
-                    mensagemTrancada: 'Biblioteca trancada',
-                    mensagemAbrir: 'A biblioteca foi destrancada.',
-                })
+                .adicionarPorta(defBiblioteca)
         registrarObstaculoPorta(portaBiblioteca)
+        registrarPortaVisual(
+            portaBiblioteca,
+            defBiblioteca.x,
+            defBiblioteca.y,
+            defBiblioteca.largura,
+            defBiblioteca.altura,
+        )
+
+        // Sprites visuais das demais portas da camada 'Portas' que já começam abertas
+        portasTiled.forEach((dados, nomeTiled) => {
+            if (nomesPortasComSistema.has(nomeTiled)) {
+                return
+            }
+            const textureKey = PORTA_TEXTURA_POR_ID[nomeTiled]
+            if (!textureKey || !this.textures.exists(textureKey)) {
+                return
+            }
+            const sprite = this.add
+                .sprite(dados.x, dados.y, textureKey, 1)
+                .setDisplaySize(dados.largura, dados.altura)
+                .setDepth(5)
+            registrarPortaVisual(
+                sprite,
+                dados.x,
+                dados.y,
+                dados.largura,
+                dados.altura,
+            )
 
         // PORTA DA DIRETORIA (SALA DA AVALIAÇÃO FINAL):
         // só destranca depois do armário da biblioteca.
