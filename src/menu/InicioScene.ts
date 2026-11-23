@@ -14,7 +14,7 @@ import btnX from './btn-x.png'
 
 const DICA = 'Dica: Explore, resolva puzzles e fuja do Pato. Erros de cálculo aumentam o perigo.'
 
-const CREDITOS = [
+export const CREDITOS = [
   'O TEOREMA DE PATÁGORAS',
   '',
   'Criado por',

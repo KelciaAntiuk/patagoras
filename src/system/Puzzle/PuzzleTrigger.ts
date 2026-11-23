@@ -23,7 +23,8 @@ export class PuzzleTrigger {
   ) {
     criarTextura(scene)
 
-    this.sprite = scene.add.image(x, y, TEXTURA).setDepth(4)
+    // Invisível: serve só como ponto de referência para a proximidade do jogador.
+    this.sprite = scene.add.image(x, y, TEXTURA).setDepth(4).setVisible(false)
 
     this.dica = scene.add
       .text(x, y - TAMANHO / 2 - 2, '', {
