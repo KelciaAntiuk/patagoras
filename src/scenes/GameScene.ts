@@ -74,6 +74,11 @@ import {
 } from '../characters/Patagoras/PatagorasHit'
 
 import {
+    PatagorasAudio,
+    PATAGORAS_AUDIO_KEYS,
+} from '../characters/Patagoras/PatagorasAudio'
+
+import {
     PATAGORAS_EVENTS,
 } from '../characters/Patagoras/Patagoras.events'
 
@@ -431,6 +436,10 @@ export class GameScene
     private patagorasHit!:
         PatagorasHit
 
+    // SONS DO PATÁGORAS (passos + metal, por aproximação)
+    private patagorasAudio?:
+        PatagorasAudio
+
     private inventory!:
         InventorySystem
 
@@ -523,6 +532,13 @@ export class GameScene
         | 'lado'
         | 'diagonal-cima'
         | 'cima' = 'frente'
+
+    // SOM DOS PASSOS DO JOGADOR (toca em loop enquanto anda)
+    private somPassos?: Phaser.Sound.BaseSound
+
+    // SOM AMBIENTE DA ESCOLA (toca em loop ao fundo durante o jogo)
+    private somAmbiente?: Phaser.Sound.BaseSound
+
     constructor() {
         super('GameScene')
     }
@@ -599,6 +615,15 @@ export class GameScene
         this.load.image('sprite-comida', 'assets/sprites/puzzles/lata-comida.png')
         this.load.image('sprite-chave', 'assets/sprites/puzzles/chave.png')
         this.load.image('sprite-papel', 'assets/sprites/puzzles/papel.png')
+
+        // EFEITOS SONOROS E AMBIENTE
+        this.load.audio('passos', 'assets/audio/passos.mp3')
+        this.load.audio('som-ambiente', 'assets/audio/Som_ambiente_mapa.mp3')
+        this.load.audio(PATAGORAS_AUDIO_KEYS.steps, 'assets/audio/passo_patagoras.mp3')
+        this.load.audio(PATAGORAS_AUDIO_KEYS.metal, 'assets/audio/metal_rangendo_patagoras.mp3')
+        this.load.audio('puzzle-completo', 'assets/audio/efeito_puzzle_completo.mp3')
+        this.load.audio('som-escapar-chave', 'assets/audio/som_escapar_chave.mp3')
+        this.load.audio('musica-vitoria', 'assets/audio/voce_escapou.mp3')
     }
 
     private criarCamada(
@@ -1010,6 +1035,13 @@ export class GameScene
                 this.player,
             )
 
+        // SONS DO PATÁGORAS
+        this.patagorasAudio =
+            new PatagorasAudio(
+                this,
+                this.patagoras,
+            )
+
         this.patagorasHit.on(
             PATAGORAS_EVENTS.HIT_PLAYER,
             () => {
@@ -1065,6 +1097,12 @@ export class GameScene
                 'biblioteca-senha',
             )
 
+        this.puzzles
+            .adicionarGatilho(
+                692,
+                340,
+                'documento-diretor',
+            )
 
         this.criarPortas()
 
@@ -1076,6 +1114,14 @@ export class GameScene
                 420,
                 338,
                 'sala-aula-2',
+            )
+
+        // PUZZLE DENTRO DA SALA DO DIRETOR (NÃO PRECISA DE ITENS)
+        this.puzzles
+            .adicionarGatilho(
+                660,
+                476,
+                'diretor',
             )
 
         // SISTEMA DE COMIDA
@@ -1195,10 +1241,80 @@ export class GameScene
 
         this.criarCameraHud()
 
+        // SOM DOS PASSOS (só cria se o arquivo foi carregado)
+        if (this.cache.audio.exists('passos')) {
+            this.somPassos = this.sound.add('passos', {
+                loop: true,
+                volume: 0.2,
+            })
+        }
+
+        // SOM AMBIENTE DA ESCOLA (loop discreto de fundo)
+        let tocarAmbiente: (() => void) | undefined
+        let pausarAmbiente: (() => void) | undefined
+        let retomarAmbiente: (() => void) | undefined
+
+        if (this.cache.audio.exists('som-ambiente')) {
+            this.somAmbiente = this.sound.add('som-ambiente', {
+                loop: true,
+                volume: 0.9,
+            })
+
+            tocarAmbiente = () => {
+                if (this.somAmbiente && !this.somAmbiente.isPlaying && !this.scene.isPaused()) {
+                    this.somAmbiente.play()
+                }
+            }
+
+            pausarAmbiente = () => {
+                if (this.somAmbiente?.isPlaying) {
+                    this.somAmbiente.pause()
+                }
+            }
+
+            retomarAmbiente = () => {
+                if (this.somAmbiente?.isPaused) {
+                    this.somAmbiente.resume()
+                } else if (this.somAmbiente && !this.somAmbiente.isPlaying) {
+                    this.somAmbiente.play()
+                }
+            }
+
+            if (this.sound.locked) {
+                this.sound.once(Phaser.Sound.Events.UNLOCKED, tocarAmbiente)
+            } else {
+                tocarAmbiente()
+            }
+
+            this.events.on('pause', pausarAmbiente)
+            this.events.on('resume', retomarAmbiente)
+        }
+
         // LIMPEZA AO SAIR DA SCENE
         this.events.once(
             'shutdown',
             () => {
+                if (tocarAmbiente) {
+                    this.sound.off(Phaser.Sound.Events.UNLOCKED, tocarAmbiente)
+                }
+                if (pausarAmbiente) {
+                    this.events.off('pause', pausarAmbiente)
+                }
+                if (retomarAmbiente) {
+                    this.events.off('resume', retomarAmbiente)
+                }
+
+                this.somAmbiente?.stop()
+                this.somAmbiente?.destroy()
+                this.somAmbiente = undefined
+
+                this.patagorasAudio?.destroy()
+                this.patagorasAudio = undefined
+
+                this.somPassos?.stop()
+                this.somPassos?.destroy()
+                this.somPassos = undefined
+
                 this.doorSystem
                     .destroy()
 
@@ -1251,6 +1367,9 @@ export class GameScene
 
         this.escape.reset()
 
+        // PARA OS PASSOS AO ABRIR O MENU
+        this.atualizarSomPassos(false)
+
         this.scene.launch(
             'MenuScene',
             {
@@ -1259,6 +1378,26 @@ export class GameScene
         )
 
         this.scene.pause()
+    }
+
+    private atualizarSomPassos(
+        andando: boolean,
+    ): void {
+        const som = this.somPassos
+
+        if (!som) {
+            return
+        }
+
+        if (andando) {
+            if (som.isPaused) {
+                som.resume()
+            } else if (!som.isPlaying) {
+                som.play()
+            }
+        } else if (som.isPlaying) {
+            som.pause()
+        }
     }
 
     update(): void {
@@ -1368,9 +1507,19 @@ export class GameScene
             this.player.anims.play('parado-' + this.ultimaDirecao, true)
         }
 
+        // TOCA / PAUSA O SOM DOS PASSOS CONFORME MOVIMENTO
+        this.atualizarSomPassos(direction.length() > 0)
+
         // ATUALIZA IA DO PATÁGORAS
         this.patagorasAI.update()
         this.patagoras.updateAnimation()
+
+        // SONS DO PATÁGORAS (ritmo conforme velocidade, volume por distância)
+        this.patagorasAudio?.update(
+            this.player.x,
+            this.player.y,
+            this.game.loop.delta,
+        )
 
         if (this.revelandoChave) {
             const centro = this.cameras.main.midPoint
@@ -1894,8 +2043,7 @@ export class GameScene
                 })
         registrarObstaculoPorta(portaBiblioteca)
 
-        // PORTA DA DIRETORIA (SALA DA AVALIAÇÃO FINAL):
-        // só destranca depois do armário da biblioteca.
+        // PORTA DA SALA DO DIRETOR: trancada até confirmar a leitura do documento na biblioteca ('documento-diretor')
         const portaDiretoria =
             this.doorSystem
                 .adicionarPorta({
@@ -1908,11 +2056,11 @@ export class GameScene
                         tipo: 'callback',
                         fn: () =>
                             this.puzzles
-                                .estado('biblioteca-senha') ===
+                                .estado('documento-diretor') ===
                             PuzzleEstado.Resolvido,
                     },
-                    mensagemTrancada: 'Diretoria trancada',
-                    mensagemAbrir: 'A diretoria foi destrancada.',
+                    mensagemTrancada: 'Sala do Diretor trancada',
+                    mensagemAbrir: 'A Sala do Diretor foi destrancada.',
                 })
         registrarObstaculoPorta(portaDiretoria)
 
@@ -1942,12 +2090,19 @@ export class GameScene
         registrarObstaculoPorta(portaSaida)
 
         portaSaida.on(DOOR_EVENTS.UNLOCKED, () => {
+            if (this.cache.audio.exists('som-escapar-chave')) {
+                this.sound.play('som-escapar-chave', {
+                    volume: 0.7,
+                })
+            }
+
             if (PORTA_SAIDA.mensagemAbrir) {
                 this.mostrarStatus(PORTA_SAIDA.mensagemAbrir)
             }
 
             // Mostra a porta abrindo e depois o modal de vitória
             this.time.delayedCall(700, () => {
+                this.atualizarSomPassos(false)
                 this.scene.launch('VitoriaScene')
                 this.scene.pause()
             })
@@ -2320,6 +2475,12 @@ export class GameScene
             (
                 puzzleId: PuzzleId,
             ) => {
+                if (this.cache.audio.exists('puzzle-completo')) {
+                    this.sound.play('puzzle-completo', {
+                        volume: 1.5,
+                    })
+                }
+
                 // SALA 1 RESOLVIDA -> DESTRANCA TAMBÉM A BIBLIOTECA
                 if (puzzleId === 'sala-aula-1') {
                     const portaBiblioteca =
@@ -2358,14 +2519,33 @@ export class GameScene
                     return
                 }
 
-                if (puzzleId === 'biblioteca-senha') {
+                if (puzzleId === 'documento-diretor') {
                     const portaDiretoria =
-                        this.doorSystem.getPorta(PORTA_DIRETORIA_ID)
+                        this.doorSystem
+                            .getPorta(
+                                PORTA_DIRETORIA_ID,
+                            )
+
                     if (portaDiretoria?.isLocked) {
                         portaDiretoria.unlock()
                     }
+
                     this.mostrarStatus(
-                        'Armário destrancado! A diretoria foi aberta.',
+                        'Documento lido! A porta da Sala do Diretor foi aberta.',
+                    )
+                    return
+                }
+
+                if (puzzleId === 'diretor') {
+                    this.mostrarStatus(
+                        'Trava do avô desbloqueada! A porta da Avaliação Final foi liberada.',
+                    )
+                    return
+                }
+
+                if (puzzleId === 'biblioteca-senha') {
+                    this.mostrarStatus(
+                        'Armário destrancado! Você encontrou os documentos confidenciais do Diretor.',
                     )
                     return
                 }

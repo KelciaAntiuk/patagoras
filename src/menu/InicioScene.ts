@@ -28,6 +28,7 @@ export const CREDITOS = [
 
 export class InicioScene extends Phaser.Scene {
   private painel!: Janela
+  private musicaMenu?: Phaser.Sound.BaseSound
 
   constructor() {
     super('InicioScene')
@@ -41,6 +42,7 @@ export class InicioScene extends Phaser.Scene {
     this.load.image('btn-creditos-hover', btnCreditosHover)
     this.load.image('painel', painel)
     this.load.image('btn-x', btnX)
+    this.load.audio('musica-menu', 'assets/audio/suspense_tela_inicial.mp3')
   }
 
   create(): void {
@@ -75,6 +77,37 @@ export class InicioScene extends Phaser.Scene {
       .setOrigin(0.5)
 
     this.criarPainel()
+    this.iniciarMusica()
+  }
+
+  private iniciarMusica(): void {
+    if (!this.cache.audio.exists('musica-menu')) {
+      return
+    }
+
+    this.musicaMenu = this.sound.add('musica-menu', {
+      loop: true,
+      volume: 0.5,
+    })
+
+    const tocar = (): void => {
+      if (this.musicaMenu && !this.musicaMenu.isPlaying) {
+        this.musicaMenu.play()
+      }
+    }
+
+    if (this.sound.locked) {
+      this.sound.once(Phaser.Sound.Events.UNLOCKED, tocar)
+    } else {
+      tocar()
+    }
+
+    this.events.once('shutdown', () => {
+      this.sound.off(Phaser.Sound.Events.UNLOCKED, tocar)
+      this.musicaMenu?.stop()
+      this.musicaMenu?.destroy()
+      this.musicaMenu = undefined
+    })
   }
 
   private criarPainel(): void {

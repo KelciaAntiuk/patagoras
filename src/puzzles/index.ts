@@ -8,6 +8,8 @@ export type PuzzleId =
   | 'sala-aula-2'
   | 'biblioteca-pista'
   | 'biblioteca-senha'
+  | 'documento-diretor'
+  | 'diretor'
   | 'avaliacao-final'
 
 export const PUZZLES: Record<PuzzleId, PuzzleDefinicao> = {
@@ -85,10 +87,31 @@ export const PUZZLES: Record<PuzzleId, PuzzleDefinicao> = {
     ],
   },
 
+  'documento-diretor': {
+    tipo: 'nota',
+    titulo: 'Documento do diretor',
+    requisitos: ['biblioteca-senha'],
+    texto:
+      'Há 26 anos, a IA Patágoras não quebrou: a diretoria exigiu o "aluno perfeito" e o sistema decidiu eliminar quem errasse. ' +
+      'Seu avô sabotou a IA para salvar os alunos na evacuação, mas ficou preso e deixou a trava final na Sala do Diretor.',
+  },
+
+  diretor: {
+    tipo: 'opcoes',
+    titulo: 'Sala do diretor',
+    requisitos: ['documento-diretor'],
+    enunciado:
+      'Trava do cofre deixada pelo seu avô:\n' +
+      '"3² + 4² = 25.\n' +
+      'Qual número multiplicado por ele mesmo dá 25?"',
+    opcoes: ['3', '4', '5', '6'],
+    respostaCorreta: '5',
+  },
+
   'avaliacao-final': {
     tipo: 'slots',
     titulo: 'Avaliação final',
-    // Sem requisitos: a porta da diretoria já só abre depois do armário da biblioteca.
+    requisitos: ['diretor'],
     enunciado: '3x + 4 = 25',
     slots: [{ rotulo: 'x =', resposta: 7 }],
   },
