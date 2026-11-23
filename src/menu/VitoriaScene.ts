@@ -26,6 +26,7 @@ const VAO = 8
  */
 export class VitoriaScene extends Phaser.Scene {
   private conteudo: Phaser.GameObjects.GameObject[] = []
+  private musicaVitoria?: Phaser.Sound.BaseSound
 
   constructor() {
     super('VitoriaScene')
@@ -34,6 +35,10 @@ export class VitoriaScene extends Phaser.Scene {
   preload(): void {
     for (const [chave, url] of Object.entries(TEXTURAS)) {
       if (!this.textures.exists(chave)) this.load.image(chave, url)
+    }
+
+    if (!this.cache.audio.exists('musica-vitoria')) {
+      this.load.audio('musica-vitoria', 'assets/audio/voce_escapou.mp3')
     }
   }
 
@@ -44,6 +49,37 @@ export class VitoriaScene extends Phaser.Scene {
 
     const { interior } = montarPainel(this, 'painel', 0.6)
     this.mostrarVitoria(interior)
+    this.iniciarMusica()
+  }
+
+  private iniciarMusica(): void {
+    if (!this.cache.audio.exists('musica-vitoria')) {
+      return
+    }
+
+    this.musicaVitoria = this.sound.add('musica-vitoria', {
+      loop: true,
+      volume: 0.5,
+    })
+
+    const tocar = (): void => {
+      if (this.musicaVitoria && !this.musicaVitoria.isPlaying) {
+        this.musicaVitoria.play()
+      }
+    }
+
+    if (this.sound.locked) {
+      this.sound.once(Phaser.Sound.Events.UNLOCKED, tocar)
+    } else {
+      tocar()
+    }
+
+    this.events.once('shutdown', () => {
+      this.sound.off(Phaser.Sound.Events.UNLOCKED, tocar)
+      this.musicaVitoria?.stop()
+      this.musicaVitoria?.destroy()
+      this.musicaVitoria = undefined
+    })
   }
 
   private limpar(): void {

@@ -1,6 +1,7 @@
 import type { Puzzle } from '../Puzzle'
 import type { PuzzleContexto, PuzzleDefinicao } from '../Puzzle.types'
 import { NotaPuzzle } from './NotaPuzzle'
+import { OpcoesPuzzle } from './OpcoesPuzzle'
 import { SlotsPuzzle } from './SlotsPuzzle'
 
 export function criarPuzzle(ctx: PuzzleContexto, def: PuzzleDefinicao): Puzzle {
@@ -9,5 +10,7 @@ export function criarPuzzle(ctx: PuzzleContexto, def: PuzzleDefinicao): Puzzle {
       return new SlotsPuzzle(ctx, def)
     case 'nota':
       return new NotaPuzzle(ctx, def)
+    case 'opcoes':
+      return new OpcoesPuzzle(ctx, def)
   }
 }

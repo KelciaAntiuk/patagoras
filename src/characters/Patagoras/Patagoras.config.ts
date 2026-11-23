@@ -28,3 +28,36 @@ export const PATAGORAS_CONFIG = {
     waypointReachDistance: 4,
     pathfindingPadding: 0,
 } as const
+
+// CONFIGURAÇÃO DOS SONS DO PATÁGORAS (som por aproximação)
+export const PATAGORAS_AUDIO_CONFIG = {
+    // Distância (px) em que o som está no volume máximo
+    minDistance: 32,
+    // Distância (px) a partir da qual não se escuta mais nada
+    maxDistance: 320,
+
+    // Volume máximo de cada som (quando o pato está colado no jogador)
+    stepsMaxVolume: 0.22,
+    metalMaxVolume: 0.15,
+
+    // Volume relativo do metal quando o pato está parado (0 a 1)
+    metalIdleFactor: 0.4,
+
+    // Limites da velocidade de reprodução dos passos
+    // (1 = velocidade normal de patrulha, sem erros)
+    stepsMinRate: 0.8,
+    stepsMaxRate: 2,
+
+    // Quanto o metal acelera/aumenta a cada nível de erro (0 = nada)
+    metalRateBoost: 0.5,
+    metalVolumeBoost: 0.4,
+
+    // Intensidade máxima do som estéreo (esquerda/direita)
+    maxPan: 0.6,
+
+    // Velocidade mínima (px/s) para considerar que o pato está andando
+    movingThreshold: 5,
+
+    // Suavização das mudanças de volume (ms)
+    smoothingMs: 120,
+} as const

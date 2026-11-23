@@ -51,7 +51,14 @@ export interface NotaPuzzleDef extends PuzzleBaseDef {
   readonly texto: string
 }
 
-export type PuzzleDefinicao = SlotsPuzzleDef | NotaPuzzleDef
+export interface OpcoesPuzzleDef extends PuzzleBaseDef {
+  readonly tipo: 'opcoes'
+  readonly enunciado: string
+  readonly opcoes: readonly string[]
+  readonly respostaCorreta: string
+}
+
+export type PuzzleDefinicao = SlotsPuzzleDef | NotaPuzzleDef | OpcoesPuzzleDef
 
 export interface PuzzleContexto {
   readonly cena: Phaser.Scene
