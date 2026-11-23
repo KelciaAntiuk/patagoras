@@ -210,92 +210,32 @@ const COR_PAREDE_BASE = 0x2a1f19
 const CHAVE_SAIDA_X = 486
 const CHAVE_SAIDA_Y = 664
 
-const TEST_ITEMS:
-    readonly ItemDefinition[] = [
-        {
-            id: 'food-can',
-            name: 'Lata de comida',
-            description:
-                'Uma lata fechada encontrada no internato.',
-            textureKey:
-                'sprite-comida',
-            kind:
-                ItemKind.Food,
-        },
-        {
-            id: 'number-six',
-            name: 'Número 6',
-            description:
-                'Um seis de metal, arrancado de alguma porta.',
-            textureKey:
-                'sprite-numero-6',
-            kind:
-                ItemKind.Number,
-            value: 6,
-        },
-        {
-            id: 'number-seven',
-            name: 'Número 7',
-            description:
-                'Um número que pode ser útil em algum puzzle.',
-            textureKey:
-                'sprite-numero-7',
-            kind:
-                ItemKind.Number,
-            value: 7,
-        },
-    ]
+const COMIDA: ItemDefinition = {
+    id: 'food-can',
+    name: 'Lata de comida',
+    description:
+        'Uma lata fechada encontrada no internato.',
+    textureKey:
+        'sprite-comida',
+    kind:
+        ItemKind.Food,
+}
 
+// Cada área só tem as peças do puzzle que destranca a próxima.
+// Dígitos repetidos (1 e 3) nunca ficam acessíveis antes da hora,
+// para uma peça de um puzzle posterior não resolver um anterior.
 const ITENS_DOS_PUZZLES: readonly {
     readonly item: ItemDefinition
     readonly x: number
     readonly y: number
     readonly cor: number
 }[] = [
+    // SAGUÃO (início): peças do refeitório (13) e uma comida para aprender o Q
     {
-        item: {
-            id: 'biblioteca-numero-3',
-            name: 'Página 3',
-            description:
-                'Página 3 arrancada de um livro marcado da biblioteca.',
-            textureKey:
-                'sprite-numero-3',
-            kind: ItemKind.Number,
-            value: 3,
-        },
-        x: 516,
-        y: 324,
-        cor: 0xff7675,
-    },
-    {
-        item: {
-            id: 'biblioteca-numero-8',
-            name: 'Página 8',
-            description:
-                'Página 8 antiga com anotações e número destacado.',
-            textureKey:
-                'sprite-numero-8',
-            kind: ItemKind.Number,
-            value: 8,
-        },
-        x: 596,
-        y: 324,
-        cor: 0x74b9ff,
-    },
-    {
-        item: {
-            id: 'biblioteca-numero-1',
-            name: 'Página 1',
-            description:
-                'Página 1 marcada com o primeiro dígito do código.',
-            textureKey:
-                'sprite-numero-1',
-            kind: ItemKind.Number,
-            value: 1,
-        },
-        x: 596,
-        y: 372,
-        cor: 0xffeaa7,
+        item: COMIDA,
+        x: 372,
+        y: 604,
+        cor: 0xe67e22,
     },
     {
         item: {
@@ -308,8 +248,8 @@ const ITENS_DOS_PUZZLES: readonly {
             kind: ItemKind.Number,
             value: 1,
         },
-        x: 540,
-        y: 606,
+        x: 372,
+        y: 676,
         cor: 0xa29bfe,
     },
     {
@@ -323,40 +263,13 @@ const ITENS_DOS_PUZZLES: readonly {
             kind: ItemKind.Number,
             value: 3,
         },
-        x: 530,
-        y: 676,
+        x: 580,
+        y: 652,
         cor: 0x55efc4,
     },
-    {
-        item: {
-            id: 'sala1-numero-1',
-            name: 'Número 1',
-            description:
-                'Um um de giz, desenhado num caco de lousa.',
-            textureKey:
-                'sprite-numero-1',
-            kind: ItemKind.Number,
-            value: 1,
-        },
-        x: 300,
-        y: 520,
-        cor: 0xdfe6e9,
-    },
-    {
-        item: {
-            id: 'sala1-numero-9',
-            name: 'Número 9',
-            description:
-                'Um nove de giz, desenhado num caco de lousa.',
-            textureKey:
-                'sprite-numero-9',
-            kind: ItemKind.Number,
-            value: 9,
-        },
-        x: 450,
-        y: 515,
-        cor: 0x81ecec,
-    },
+
+    // REFEITÓRIO + SALA 2: peças da sala 2 (24), da porta da cozinha (6)
+    // e o 1 da porta da sala 1, longe da porta, perto de onde o Patágoras ronda
     {
         item: {
             id: 'sala2-numero-2',
@@ -383,9 +296,63 @@ const ITENS_DOS_PUZZLES: readonly {
             kind: ItemKind.Number,
             value: 4,
         },
-        x: 468,
-        y: 392,
+        x: 284,
+        y: 548,
         cor: 0xfdcb6e,
+    },
+    {
+        item: {
+            id: 'number-six',
+            name: 'Número 6',
+            description:
+                'Um seis de metal, arrancado de alguma porta.',
+            textureKey:
+                'sprite-numero-6',
+            kind: ItemKind.Number,
+            value: 6,
+        },
+        x: 468,
+        y: 330,
+        cor: 0x16a085,
+    },
+    {
+        item: {
+            id: 'sala1-numero-1',
+            name: 'Número 1',
+            description:
+                'Um um de giz, desenhado num caco de lousa.',
+            textureKey:
+                'sprite-numero-1',
+            kind: ItemKind.Number,
+            value: 1,
+        },
+        x: 580,
+        y: 548,
+        cor: 0xdfe6e9,
+    },
+
+    // COZINHA: o 9 da porta da sala 1, comida extra e o 7 da avaliação
+    // final, que aparece cedo de propósito e só serve lá no fim
+    {
+        item: {
+            id: 'sala1-numero-9',
+            name: 'Número 9',
+            description:
+                'Um nove de giz, desenhado num caco de lousa.',
+            textureKey:
+                'sprite-numero-9',
+            kind: ItemKind.Number,
+            value: 9,
+        },
+        x: 164,
+        y: 548,
+        cor: 0x81ecec,
+    },
+    {
+        item: COMIDA,
+        x: 196,
+        y: 516,
+        cor: 0xe67e22,
     },
     {
         item: {
@@ -398,19 +365,57 @@ const ITENS_DOS_PUZZLES: readonly {
             kind: ItemKind.Number,
             value: 7,
         },
-        x: 268,
-        y: 492,
+        x: 164,
+        y: 436,
         cor: 0xe17055,
     },
-]
 
-const TEST_ITEM_COLORS = [
-    0x16a085,
-    0xf1c40f,
-    0xecf0f1,
-    0x9b59b6,
-    0xe67e22,
-    0x2ecc71,
+    // SALA 1 + BIBLIOTECA (abrem juntas): páginas do armário (381)
+    {
+        item: {
+            id: 'biblioteca-numero-8',
+            name: 'Página 8',
+            description:
+                'Página 8 antiga com anotações e número destacado.',
+            textureKey:
+                'sprite-numero-8',
+            kind: ItemKind.Number,
+            value: 8,
+        },
+        x: 172,
+        y: 326,
+        cor: 0x74b9ff,
+    },
+    {
+        item: {
+            id: 'biblioteca-numero-3',
+            name: 'Página 3',
+            description:
+                'Página 3 arrancada de um livro marcado da biblioteca.',
+            textureKey:
+                'sprite-numero-3',
+            kind: ItemKind.Number,
+            value: 3,
+        },
+        x: 516,
+        y: 324,
+        cor: 0xff7675,
+    },
+    {
+        item: {
+            id: 'biblioteca-numero-1',
+            name: 'Página 1',
+            description:
+                'Página 1 marcada com o primeiro dígito do código.',
+            textureKey:
+                'sprite-numero-1',
+            kind: ItemKind.Number,
+            value: 1,
+        },
+        x: 716,
+        y: 388,
+        cor: 0xffeaa7,
+    },
 ]
 
 export class GameScene
@@ -1088,9 +1093,6 @@ export class GameScene
                 this.inventory,
                 this.collision,
             )
-        // ITENS DE TESTE
-        this.spawnTestPickups()
-
         this.spawnItensDosPuzzles()
 
         // LIMITES DA CÂMERA
@@ -1630,24 +1632,6 @@ export class GameScene
             20,
             0xe74c3c,
         )
-
-        TEST_ITEMS.forEach(
-            (
-                item,
-                index,
-            ) => {
-                if (!this.textures.exists(item.textureKey)) this.createSolidTexture(
-                    item.textureKey,
-                    26,
-                    26,
-                    TEST_ITEM_COLORS[
-                    index %
-                    TEST_ITEM_COLORS
-                        .length
-                    ],
-                )
-            },
-        )
     }
 
     private createSolidTexture(
@@ -2093,44 +2077,6 @@ export class GameScene
                         entrada.x,
                         entrada.y,
                         entrada.item,
-                    )
-            },
-        )
-    }
-
-    private spawnTestPickups():
-        void {
-
-        const positions = [
-            {
-                x: 480,
-                y: 480,
-            },
-            {
-                x: 430,
-                y: 430,
-            },
-            {
-                x: 380,
-                y: 440,
-            },
-        ]
-
-        positions.forEach(
-            (
-                position,
-                index,
-            ) => {
-                this.collision
-                    .spawnPickup(
-                        position.x,
-                        position.y,
-
-                        TEST_ITEMS[
-                        index %
-                        TEST_ITEMS
-                            .length
-                        ],
                     )
             },
         )
