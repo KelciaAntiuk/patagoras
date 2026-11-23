@@ -289,8 +289,9 @@ const COR_PAREDE = 0x44342c
 const COR_PAREDE_TOPO = 0x5a463a
 const COR_PAREDE_BASE = 0x2a1f19
 
-const CHAVE_SAIDA_X = 486
-const CHAVE_SAIDA_Y = 664
+// Entre as velas do esconderijo (sala abaixo da diretoria)
+const CHAVE_SAIDA_X = 700
+const CHAVE_SAIDA_Y = 668
 
 const COMIDA: ItemDefinition = {
     id: 'food-can',
@@ -523,9 +524,6 @@ export class GameScene
 
     private foodThrow!:
         FoodThrowSystem
-
-    /** Enquanto true, a escuridão segue a câmera (revelação da chave). */
-    private revelandoChave = false
 
     private escuridao!:
         Phaser.GameObjects.Image
@@ -1507,15 +1505,10 @@ export class GameScene
         this.patagorasAI.update()
         this.patagoras.updateAnimation()
 
-        if (this.revelandoChave) {
-            const centro = this.cameras.main.midPoint
-            this.escuridao.setPosition(centro.x, centro.y)
-        } else {
-            this.escuridao.setPosition(
-                this.player.x,
-                this.player.y,
-            )
-        }
+        this.escuridao.setPosition(
+            this.player.x,
+            this.player.y,
+        )
 
         // ATUALIZA QUAL ITEM ESTÁ
         // MAIS PRÓXIMO DO PLAYER
@@ -2567,39 +2560,6 @@ export class GameScene
         }
     }
 
-    /**
-     * Faz a chave da saída aparecer e leva a câmera até ela,
-     * voltando para o jogador em seguida. O jogo fica pausado
-     * durante a animação para o Patágoras não atacar.
-     */
-    private revelarChaveSaida(): void {
-        this.collision.spawnPickup(
-            CHAVE_SAIDA_X,
-            CHAVE_SAIDA_Y,
-            CHAVE_SAIDA,
-        )
-
-        const camera = this.cameras.main
-        const IDA_MS = 900
-        const PAUSA_MS = 1200
-        const VOLTA_MS = 700
-
-        this.revelandoChave = true
-        this.physics.pause()
-        camera.stopFollow()
-        camera.pan(CHAVE_SAIDA_X, CHAVE_SAIDA_Y, IDA_MS, 'Sine.easeInOut')
-
-        this.time.delayedCall(IDA_MS + PAUSA_MS, () => {
-            camera.pan(this.player.x, this.player.y, VOLTA_MS, 'Sine.easeInOut')
-
-            this.time.delayedCall(VOLTA_MS, () => {
-                camera.startFollow(this.player, true, 0.2, 0.2)
-                this.physics.resume()
-                this.revelandoChave = false
-            })
-        })
-    }
-
     private abrirPorta(
         puzzleId: PuzzleId,
     ): boolean {
@@ -2875,9 +2835,13 @@ export class GameScene
                 if (puzzleId === 'avaliacao-final') {
                     this.abrirPorta(puzzleId)
                     this.mostrarStatus(
-                        'Avaliação final concluída! Uma chave apareceu perto da saída.',
+                        'Avaliação final concluída! Algo brilha entre as velas da sala escondida.',
                     )
-                    this.revelarChaveSaida()
+                    this.collision.spawnPickup(
+                        CHAVE_SAIDA_X,
+                        CHAVE_SAIDA_Y,
+                        CHAVE_SAIDA,
+                    )
                     return
                 }
 
