@@ -35,7 +35,7 @@ export class Patagoras {
 
         this.sprite
             .setScale(PATAGORAS_CONFIG.scale)
-            .setDepth(5)
+            .setDepth(20)
 
         this.sprite
             .setSize(
