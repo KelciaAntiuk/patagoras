@@ -69,6 +69,10 @@ import {
     PatagorasPathfinder,
 } from '../characters/Patagoras/PatagorasPathfinder'
 
+import type {
+    AvoidPoint,
+} from '../characters/Patagoras/PatagorasPathfinder'
+
 import {
     PatagorasHit,
 } from '../characters/Patagoras/PatagorasHit'
@@ -624,6 +628,14 @@ export class GameScene
 
     private solidObstaclesDirty = true
 
+    private wallCollisionRects:
+        readonly WorldRect[] = []
+
+    private visionObstaclesCache:
+        readonly WorldRect[] = []
+
+    private visionObstaclesDirty = true
+
     private ultimaDirecao:
         | 'frente'
         | 'diagonal-baixo'
@@ -922,6 +934,8 @@ export class GameScene
             PLAYER_CONFIG.bodyOffsetX,
             PLAYER_CONFIG.bodyOffsetY,
         )
+        ;(this.player.body as Phaser.Physics.Arcade.Body | null)
+            ?.updateFromGameObject()
 
         // Movimentação do personagem para frente (baixo) - frames 8, 9, 10, 11
         this.anims.create({
@@ -1059,14 +1073,12 @@ export class GameScene
         this.playerLife =
             new PlayerLifeSystem()
 
-        // PATÁGORAS
+        // PATÁGORAS (posição inicial provisória; ajustada após criar as portas)
         this.patagoras =
             new Patagoras(
                 this,
-                // Canto oposto à porta do refeitório, fora do raio de
-                // detecção: o jogador não apanha logo ao entrar
-                284,
-                444,
+                428,
+                492,
             )
 
         // LIMITES FÍSICOS DO MUNDO
@@ -1113,6 +1125,9 @@ export class GameScene
             ? this.extractWallRects([layerColisao])
             : []
 
+        this.wallCollisionRects = wallRects
+        this.visionObstaclesDirty = true
+
         const furnitureRects =
             this.extractObjectLayerRects(
                 map,
@@ -1144,11 +1159,19 @@ export class GameScene
             new PatagorasPathfinder(
                 WORLD_WIDTH,
                 WORLD_HEIGHT,
-                16,
+                PATAGORAS_CONFIG
+                    .pathfindingCellSize,
                 collisionRects,
                 PATAGORAS_CONFIG
                     .pathfindingPadding,
+                PATAGORAS_CONFIG
+                    .bodyWidth,
+                PATAGORAS_CONFIG
+                    .bodyHeight,
             )
+
+        const refeitorioBounds =
+            this.calcularBoundsSala('refeitorio')
 
         // IA DO PATÁGORAS
         this.patagorasAI =
@@ -1157,6 +1180,14 @@ export class GameScene
                 this.patagoras,
                 this.player,
                 this.patagorasPathfinder,
+                {
+                    getVisionObstacles: () =>
+                        this.getVisionObstacles(),
+                    isSameRoom: () =>
+                        this.patagorasNaMesmaSala(),
+                    patrolBounds:
+                        refeitorioBounds,
+                },
             )
 
         // HIT DO PATÁGORAS
@@ -1271,6 +1302,13 @@ export class GameScene
                 this.collision,
             )
         this.spawnItensDosPuzzles()
+
+        const spawnPatagoras =
+            this.resolverSpawnPatagoras(refeitorioBounds)
+        this.patagoras.setBodyCenter(
+            spawnPatagoras.x,
+            spawnPatagoras.y,
+        )
 
         this.atualizarVisibilidadeSala(true)
 
@@ -1479,6 +1517,9 @@ export class GameScene
 
                 this.solidObstaclesCache = []
                 this.solidObstaclesDirty = true
+                this.wallCollisionRects = []
+                this.visionObstaclesCache = []
+                this.visionObstaclesDirty = true
             },
         )
 
@@ -1784,6 +1825,49 @@ export class GameScene
             this.solidObstaclesDirty = false
         }
         return this.solidObstaclesCache
+    }
+
+    private getVisionObstacles(): readonly WorldRect[] {
+        if (!this.doorSystem) {
+            return this.wallCollisionRects
+        }
+        if (this.visionObstaclesDirty) {
+            const closedDoors =
+                this.doorSystem.getClosedDoorRects()
+            this.visionObstaclesCache =
+                closedDoors.length === 0
+                    ? this.wallCollisionRects
+                    : [...this.wallCollisionRects, ...closedDoors]
+            this.visionObstaclesDirty = false
+        }
+        return this.visionObstaclesCache
+    }
+
+    private patagorasNaMesmaSala(): boolean {
+        if (this.salasChao.size === 0) {
+            return true
+        }
+
+        const playerCenter = getActorCenter(this.player)
+        const salaJogador = this.descobrirSala(
+            playerCenter.x,
+            playerCenter.y,
+            this.salaAtual,
+        )
+
+        const duckX = this.patagoras.getBodyCenterX()
+        const duckY = this.patagoras.getBodyCenterY()
+        const salaPato = this.descobrirSala(
+            duckX,
+            duckY,
+            salaJogador,
+        )
+
+        if (salaJogador === null || salaPato === null) {
+            return true
+        }
+
+        return salaJogador === salaPato
     }
 
     private descobrirSala(
@@ -2433,23 +2517,19 @@ export class GameScene
         const registrarObstaculoPorta = (
             porta: PuzzleDoor,
         ): void => {
-            const isRefeitorio =
-                porta.id === 'porta-refeitorio'
             const rect: WorldRect = {
                 x:
                     porta.def.x -
                     porta.def.largura / 2,
-                y: isRefeitorio
-                    ? 564
-                    : porta.def.y -
-                      porta.def.altura / 2,
+                y:
+                    porta.def.y -
+                    porta.def.altura / 2,
                 width: porta.def.largura,
-                height: isRefeitorio
-                    ? 32
-                    : porta.def.altura,
+                height: porta.def.altura,
             }
 
             this.solidObstaclesDirty = true
+            this.visionObstaclesDirty = true
 
             this.patagorasPathfinder.setDynamicObstacle(
                 porta.id,
@@ -2461,6 +2541,7 @@ export class GameScene
                 DOOR_EVENTS.OPENED,
                 () => {
                     this.solidObstaclesDirty = true
+                    this.visionObstaclesDirty = true
                     this.patagorasPathfinder.setDynamicObstacle(
                         porta.id,
                         rect,
@@ -2473,6 +2554,7 @@ export class GameScene
                 DOOR_EVENTS.CLOSED,
                 () => {
                     this.solidObstaclesDirty = true
+                    this.visionObstaclesDirty = true
                     this.patagorasPathfinder.setDynamicObstacle(
                         porta.id,
                         rect,
@@ -3290,6 +3372,113 @@ export class GameScene
         })
     }
 
+    private calcularBoundsSala(
+        nomeSala: string,
+    ): WorldRect | undefined {
+        const chaoLayer =
+            this.salasChao.get(nomeSala)
+
+        if (chaoLayer) {
+            let minX = Infinity
+            let minY = Infinity
+            let maxX = -Infinity
+            let maxY = -Infinity
+
+            chaoLayer.forEachTile((tile) => {
+                if (!tile || tile.index <= 0) {
+                    return
+                }
+
+                const wx = tile.pixelX + chaoLayer.x
+                const wy = tile.pixelY + chaoLayer.y
+
+                if (wx < minX) minX = wx
+                if (wy < minY) minY = wy
+                if (wx + tile.width > maxX) {
+                    maxX = wx + tile.width
+                }
+                if (wy + tile.height > maxY) {
+                    maxY = wy + tile.height
+                }
+            })
+
+            if (minX < maxX && minY < maxY) {
+                return {
+                    x: minX,
+                    y: minY,
+                    width: maxX - minX,
+                    height: maxY - minY,
+                }
+            }
+        }
+
+        if (nomeSala === 'refeitorio') {
+            return {
+                x: 260,
+                y: 420,
+                width: 336,
+                height: 144,
+            }
+        }
+
+        return undefined
+    }
+
+    private resolverSpawnPatagoras(
+        boundsSala?: WorldRect,
+    ): Phaser.Math.Vector2 {
+        const bounds = boundsSala ?? {
+            x: 260,
+            y: 420,
+            width: 336,
+            height: 144,
+        }
+        const centerX = bounds.x + bounds.width / 2
+        const centerY = bounds.y + bounds.height / 2
+        const playerCenter = getActorCenter(this.player)
+
+        const avoidPoints: AvoidPoint[] = [
+            {
+                x: playerCenter.x,
+                y: playerCenter.y,
+                minDistance:
+                    PATAGORAS_CONFIG.spawnMinPlayerDistance,
+            },
+        ]
+
+        for (const doorRect of this.doorSystem.getClosedDoorRects()) {
+            avoidPoints.push({
+                x: doorRect.x + doorRect.width / 2,
+                y: doorRect.y + doorRect.height / 2,
+                minDistance:
+                    PATAGORAS_CONFIG.spawnMinDoorDistance,
+            })
+        }
+
+        const portaRefeitorio =
+            this.doorSystem.getPorta('porta-refeitorio')
+        if (portaRefeitorio) {
+            avoidPoints.push({
+                x: portaRefeitorio.def.x,
+                y: portaRefeitorio.def.y,
+                minDistance:
+                    PATAGORAS_CONFIG.spawnMinDoorDistance,
+            })
+        }
+
+        return (
+            this.patagorasPathfinder.findSafePositionNear(
+                centerX,
+                centerY,
+                {
+                    bounds,
+                    avoidPoints,
+                    preferredExtraMargin: 2,
+                },
+            ) ?? new Phaser.Math.Vector2(centerX, centerY)
+        )
+    }
+
     private updatePickupRadiusDebug():
         void {
 
@@ -3318,6 +3507,48 @@ export class GameScene
                 y,
                 PICKUP_RADIUS,
             )
+
+        if (!this.patagoras || !this.patagorasAI) {
+            return
+        }
+
+        const duckX = this.patagoras.getBodyCenterX()
+        const duckY = this.patagoras.getBodyCenterY()
+        const facing = this.patagoras.getFacingDirection()
+        const facingAngle = Math.atan2(facing.y, facing.x)
+        const halfFov = Phaser.Math.DegToRad(
+            PATAGORAS_CONFIG.visionFovDegrees / 2,
+        )
+        const visionColor = this.patagorasAI.hasVisualContactWithPlayer()
+            ? 0xff4d4d
+            : this.patagorasAI.hasPlayerBeenDetected()
+                ? 0xffa500
+                : 0xffe066
+
+        this.pickupRadiusDebug.lineStyle(1, visionColor, 0.55)
+        this.pickupRadiusDebug.beginPath()
+        this.pickupRadiusDebug.moveTo(duckX, duckY)
+        this.pickupRadiusDebug.arc(
+            duckX,
+            duckY,
+            PATAGORAS_CONFIG.detectionRadius,
+            facingAngle - halfFov,
+            facingAngle + halfFov,
+            false,
+        )
+        this.pickupRadiusDebug.closePath()
+        this.pickupRadiusDebug.strokePath()
+
+        const path = this.patagorasAI.getCurrentPath()
+        if (path.length > 0) {
+            this.pickupRadiusDebug.lineStyle(1.5, 0x00e5ff, 0.8)
+            this.pickupRadiusDebug.beginPath()
+            this.pickupRadiusDebug.moveTo(duckX, duckY)
+            for (const wp of path) {
+                this.pickupRadiusDebug.lineTo(wp.x, wp.y)
+            }
+            this.pickupRadiusDebug.strokePath()
+        }
     }
 
 }

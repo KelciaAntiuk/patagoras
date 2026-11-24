@@ -4,25 +4,62 @@ import type {
     WorldRect,
 } from '../../system/Collision/Collision.types'
 
+import {
+    hasLineOfSight,
+    segmentIntersectsRect,
+} from '../../system/Collision/LineOfSight'
+
 type GridPoint = {
     x: number
     y: number
 }
 
-type Node = GridPoint & {
-    g: number
-    h: number
-    f: number
-    parent?: Node
+type DynamicObstacleEntry = {
+    readonly rect: WorldRect
+    readonly cells: number[]
 }
+
+export interface FindPathOptions {
+    readonly snapTarget?: boolean
+}
+
+export interface AvoidPoint {
+    readonly x: number
+    readonly y: number
+    readonly minDistance: number
+}
+
+export interface SafePositionOptions {
+    readonly bounds?: WorldRect
+    readonly avoidPoints?: readonly AvoidPoint[]
+    readonly preferredExtraMargin?: number
+}
+
+const DIRECTIONS: readonly (readonly [number, number, number])[] = [
+    [1, 0, 1],
+    [-1, 0, 1],
+    [0, 1, 1],
+    [0, -1, 1],
+    [1, 1, Math.SQRT2],
+    [1, -1, Math.SQRT2],
+    [-1, 1, Math.SQRT2],
+    [-1, -1, Math.SQRT2],
+]
+
+const NEAR_WALL_PENALTY = 0.12
+const RAY_EPSILON = 1e-4
 
 export class PatagorasPathfinder {
 
-    private readonly blocked =
-        new Set<string>()
+    private readonly staticObstacles: readonly WorldRect[]
 
-    private readonly dynamicObstacles =
-        new Map<string, Set<string>>()
+    private readonly bodyHalfWidth: number
+
+    private readonly bodyHalfHeight: number
+
+    private readonly inflatedHalfWidth: number
+
+    private readonly inflatedHalfHeight: number
 
     private readonly columns: number
 
@@ -32,21 +69,58 @@ export class PatagorasPathfinder {
 
     private readonly gridOffsetY: number
 
+    private readonly staticBlocked: Uint8Array
+
+    private readonly dynamicBlockedCount: Uint16Array
+
+    private readonly dynamicObstacles =
+        new Map<string, DynamicObstacleEntry>()
+
+    private activeObstaclesCache: readonly WorldRect[] | null = null
+
+    private readonly gScore: Float32Array
+
+    private readonly parent: Int32Array
+
+    private readonly visitState: Uint32Array
+
+    private visitStamp = 0
+
+    private readonly heapIndices: number[] = []
+
+    private readonly heapF: number[] = []
+
     constructor(
-        worldWidth: number,
-        worldHeight: number,
+        private readonly worldWidth: number,
+        private readonly worldHeight: number,
         private readonly cellSize: number,
         wallRects: readonly WorldRect[],
         obstaclePadding = 0,
+        bodyWidth = 0,
+        bodyHeight = 0,
     ) {
+        this.staticObstacles = [...wallRects]
+        this.bodyHalfWidth = bodyWidth / 2
+        this.bodyHalfHeight = bodyHeight / 2
+        this.inflatedHalfWidth =
+            this.bodyHalfWidth + obstaclePadding
+        this.inflatedHalfHeight =
+            this.bodyHalfHeight + obstaclePadding
+
         const firstRect = wallRects[0]
 
         this.gridOffsetX = firstRect
-            ? ((firstRect.x % cellSize) + cellSize) % cellSize
+            ? (
+                ((firstRect.x + 8 - cellSize / 2) % cellSize) +
+                cellSize
+            ) % cellSize
             : 0
 
         this.gridOffsetY = firstRect
-            ? ((firstRect.y % cellSize) + cellSize) % cellSize
+            ? (
+                ((firstRect.y + 8 - cellSize / 2) % cellSize) +
+                cellSize
+            ) % cellSize
             : 0
 
         this.columns = Math.ceil(
@@ -57,9 +131,26 @@ export class PatagorasPathfinder {
             worldHeight / cellSize,
         )
 
+        const totalCells =
+            this.columns * this.rows
+
+        this.staticBlocked =
+            new Uint8Array(totalCells)
+
+        this.dynamicBlockedCount =
+            new Uint16Array(totalCells)
+
+        this.gScore =
+            new Float32Array(totalCells)
+
+        this.parent =
+            new Int32Array(totalCells)
+
+        this.visitState =
+            new Uint32Array(totalCells)
+
         this.buildBlockedGrid(
             wallRects,
-            obstaclePadding,
         )
     }
 
@@ -68,42 +159,298 @@ export class PatagorasPathfinder {
         rect: WorldRect,
         blocked: boolean,
     ): void {
-        if (!blocked) {
+        const existing =
+            this.dynamicObstacles.get(id)
+
+        if (existing) {
+            for (const idx of existing.cells) {
+                if (this.dynamicBlockedCount[idx] > 0) {
+                    this.dynamicBlockedCount[idx]--
+                }
+            }
             this.dynamicObstacles.delete(id)
+            this.activeObstaclesCache = null
+        }
+
+        if (!blocked) {
             return
         }
 
-        const cells = new Set<string>()
+        const cells =
+            this.getInflatedCellIndices(rect)
 
-        const left = Math.floor(
-            (rect.x - this.gridOffsetX) /
-            this.cellSize,
+        for (const idx of cells) {
+            this.dynamicBlockedCount[idx]++
+        }
+
+        this.dynamicObstacles.set(id, {
+            rect,
+            cells,
+        })
+        this.activeObstaclesCache = null
+    }
+
+    public getActiveObstacles(): readonly WorldRect[] {
+        if (this.activeObstaclesCache) {
+            return this.activeObstaclesCache
+        }
+
+        if (this.dynamicObstacles.size === 0) {
+            this.activeObstaclesCache =
+                this.staticObstacles
+            return this.activeObstaclesCache
+        }
+
+        const combined: WorldRect[] = [
+            ...this.staticObstacles,
+        ]
+
+        for (const entry of this.dynamicObstacles.values()) {
+            combined.push(entry.rect)
+        }
+
+        this.activeObstaclesCache = combined
+        return combined
+    }
+
+    public isWorldPointWalkable(
+        x: number,
+        y: number,
+        extraMargin = 0,
+    ): boolean {
+        const halfW =
+            this.inflatedHalfWidth + extraMargin
+        const halfH =
+            this.inflatedHalfHeight + extraMargin
+
+        if (
+            x - halfW < 0 ||
+            x + halfW > this.worldWidth ||
+            y - halfH < 0 ||
+            y + halfH > this.worldHeight
+        ) {
+            return false
+        }
+
+        return !this.overlapsAnyObstacle(
+            x,
+            y,
+            halfW,
+            halfH,
+        )
+    }
+
+    public hasClearBodyPath(
+        startX: number,
+        startY: number,
+        endX: number,
+        endY: number,
+        useSafetyPadding = true,
+    ): boolean {
+        const baseHalfW = useSafetyPadding
+            ? this.inflatedHalfWidth
+            : this.bodyHalfWidth
+        const baseHalfH = useSafetyPadding
+            ? this.inflatedHalfHeight
+            : this.bodyHalfHeight
+        const hw = Math.max(0, baseHalfW - RAY_EPSILON)
+        const hh = Math.max(0, baseHalfH - RAY_EPSILON)
+
+        for (const r of this.staticObstacles) {
+            if (
+                segmentIntersectsRect(
+                    startX,
+                    startY,
+                    endX,
+                    endY,
+                    r.x - hw,
+                    r.y - hh,
+                    r.width + hw * 2,
+                    r.height + hh * 2,
+                )
+            ) {
+                return false
+            }
+        }
+
+        for (const entry of this.dynamicObstacles.values()) {
+            const r = entry.rect
+            if (
+                segmentIntersectsRect(
+                    startX,
+                    startY,
+                    endX,
+                    endY,
+                    r.x - hw,
+                    r.y - hh,
+                    r.width + hw * 2,
+                    r.height + hh * 2,
+                )
+            ) {
+                return false
+            }
+        }
+
+        return true
+    }
+
+    public getWalkablePointsInBounds(
+        bounds: WorldRect,
+        stepCells = 2,
+    ): Phaser.Math.Vector2[] {
+        const step = Math.max(1, Math.floor(stepCells))
+        const minGrid = this.worldToGrid(
+            bounds.x,
+            bounds.y,
+        )
+        const maxGrid = this.worldToGrid(
+            bounds.x + bounds.width,
+            bounds.y + bounds.height,
         )
 
-        const right = Math.floor(
-            (rect.x + rect.width - 1 - this.gridOffsetX) /
-            this.cellSize,
-        )
+        const points: Phaser.Math.Vector2[] = []
 
-        const top = Math.floor(
-            (rect.y - this.gridOffsetY) /
-            this.cellSize,
-        )
+        for (let gy = minGrid.y; gy <= maxGrid.y; gy += step) {
+            for (let gx = minGrid.x; gx <= maxGrid.x; gx += step) {
+                if (this.isBlockedCell(gx, gy)) {
+                    continue
+                }
 
-        const bottom = Math.floor(
-            (rect.y + rect.height - 1 - this.gridOffsetY) /
-            this.cellSize,
-        )
+                const wx = this.cellCenterX(gx)
+                const wy = this.cellCenterY(gy)
 
-        for (let gridY = top; gridY <= bottom; gridY++) {
-            for (let gridX = left; gridX <= right; gridX++) {
-                if (this.isInsideGrid(gridX, gridY)) {
-                    cells.add(this.key(gridX, gridY))
+                if (
+                    wx < bounds.x ||
+                    wx > bounds.x + bounds.width ||
+                    wy < bounds.y ||
+                    wy > bounds.y + bounds.height
+                ) {
+                    continue
+                }
+
+                if (this.isWorldPointWalkable(wx, wy)) {
+                    points.push(
+                        new Phaser.Math.Vector2(wx, wy),
+                    )
                 }
             }
         }
 
-        this.dynamicObstacles.set(id, cells)
+        return points
+    }
+
+    public findSafePositionNear(
+        centerX: number,
+        centerY: number,
+        options: SafePositionOptions = {},
+    ): Phaser.Math.Vector2 | null {
+        const {
+            bounds,
+            avoidPoints = [],
+            preferredExtraMargin = 0,
+        } = options
+
+        const minGrid = bounds
+            ? this.worldToGrid(bounds.x, bounds.y)
+            : { x: 0, y: 0 }
+        const maxGrid = bounds
+            ? this.worldToGrid(
+                bounds.x + bounds.width,
+                bounds.y + bounds.height,
+            )
+            : {
+                x: this.columns - 1,
+                y: this.rows - 1,
+            }
+
+        const search = (
+            extraMargin: number,
+        ): Phaser.Math.Vector2 | null => {
+            let bestX = 0
+            let bestY = 0
+            let bestDistSq = Infinity
+
+            for (let gy = minGrid.y; gy <= maxGrid.y; gy++) {
+                const wy = this.cellCenterY(gy)
+
+                if (
+                    bounds &&
+                    (wy < bounds.y ||
+                        wy > bounds.y + bounds.height)
+                ) {
+                    continue
+                }
+
+                for (let gx = minGrid.x; gx <= maxGrid.x; gx++) {
+                    if (this.isBlockedCell(gx, gy)) {
+                        continue
+                    }
+
+                    const wx = this.cellCenterX(gx)
+
+                    if (
+                        bounds &&
+                        (wx < bounds.x ||
+                            wx > bounds.x + bounds.width)
+                    ) {
+                        continue
+                    }
+
+                    const dx = wx - centerX
+                    const dy = wy - centerY
+                    const distSq = dx * dx + dy * dy
+
+                    if (distSq >= bestDistSq) {
+                        continue
+                    }
+
+                    if (
+                        !this.isWorldPointWalkable(
+                            wx,
+                            wy,
+                            extraMargin,
+                        )
+                    ) {
+                        continue
+                    }
+
+                    let tooClose = false
+
+                    for (const avoid of avoidPoints) {
+                        const adx = wx - avoid.x
+                        const ady = wy - avoid.y
+                        if (
+                            adx * adx + ady * ady <
+                            avoid.minDistance * avoid.minDistance
+                        ) {
+                            tooClose = true
+                            break
+                        }
+                    }
+
+                    if (tooClose) {
+                        continue
+                    }
+
+                    bestDistSq = distSq
+                    bestX = wx
+                    bestY = wy
+                }
+            }
+
+            return bestDistSq < Infinity
+                ? new Phaser.Math.Vector2(bestX, bestY)
+                : null
+        }
+
+        if (preferredExtraMargin > 0) {
+            const preferred = search(preferredExtraMargin)
+            if (preferred) {
+                return preferred
+            }
+        }
+
+        return search(0)
     }
 
     public findPath(
@@ -111,7 +458,35 @@ export class PatagorasPathfinder {
         startY: number,
         targetX: number,
         targetY: number,
+        options: FindPathOptions = {},
     ): Phaser.Math.Vector2[] {
+        const snapTarget = options.snapTarget ?? true
+
+        if (
+            !snapTarget &&
+            !this.isWorldPointWalkable(targetX, targetY)
+        ) {
+            return []
+        }
+
+        if (
+            this.isWorldPointWalkable(startX, startY) &&
+            this.isWorldPointWalkable(targetX, targetY) &&
+            this.hasClearBodyPath(
+                startX,
+                startY,
+                targetX,
+                targetY,
+                true,
+            )
+        ) {
+            return [
+                new Phaser.Math.Vector2(
+                    targetX,
+                    targetY,
+                ),
+            ]
+        }
 
         const rawStart =
             this.worldToGrid(
@@ -127,126 +502,162 @@ export class PatagorasPathfinder {
 
         const start =
             this.findNearestWalkable(
+                startX,
+                startY,
                 rawStart,
+                12,
             )
 
-        const target =
-            this.findNearestWalkable(
+        const target = snapTarget
+            ? this.findNearestWalkable(
+                targetX,
+                targetY,
                 rawTarget,
+                12,
             )
+            : this.isInsideGrid(rawTarget.x, rawTarget.y) &&
+                !this.isBlockedCell(rawTarget.x, rawTarget.y)
+                ? rawTarget
+                : null
 
         if (!start || !target) {
             return []
         }
 
-        const open = new Map<
-            string,
-            Node
-        >()
-
-        const closed =
-            new Set<string>()
-
-        const startNode: Node = {
-            ...start,
-            g: 0,
-            h: this.heuristic(
-                start,
-                target,
-            ),
-            f: 0,
-        }
-
-        startNode.f =
-            startNode.g +
-            startNode.h
-
-        open.set(
-            this.key(start.x, start.y),
-            startNode,
-        )
-
-        while (open.size > 0) {
-
-            const current =
-                this.getLowestF(open)
-
-            if (!current) {
-                break
-            }
-
-            const currentKey =
-                this.key(
-                    current.x,
-                    current.y,
-                )
-
-            open.delete(currentKey)
-            closed.add(currentKey)
-
+        if (
+            start.x === target.x &&
+            start.y === target.y
+        ) {
             if (
-                current.x === target.x &&
-                current.y === target.y
-            ) {
-                return this.reconstructPath(
-                    current,
+                !this.overlapsAnyObstacle(
+                    targetX,
+                    targetY,
+                    this.bodyHalfWidth,
+                    this.bodyHalfHeight,
+                ) &&
+                this.hasClearBodyPath(
                     startX,
                     startY,
+                    targetX,
+                    targetY,
+                    false,
+                )
+            ) {
+                return [
+                    new Phaser.Math.Vector2(
+                        targetX,
+                        targetY,
+                    ),
+                ]
+            }
+
+            return [
+                this.gridToWorld(
+                    target.x,
+                    target.y,
+                ),
+            ]
+        }
+
+        if (this.visitStamp >= 0xfffffff0) {
+            this.visitState.fill(0)
+            this.visitStamp = 0
+        }
+
+        this.visitStamp += 2
+        const openTag = this.visitStamp
+        const closedTag = this.visitStamp + 1
+
+        const startIdx =
+            start.y * this.columns + start.x
+        const targetIdx =
+            target.y * this.columns + target.x
+
+        this.heapIndices.length = 0
+        this.heapF.length = 0
+
+        this.gScore[startIdx] = 0
+        this.parent[startIdx] = -1
+        this.visitState[startIdx] = openTag
+
+        this.heapPush(
+            startIdx,
+            this.heuristic(start.x, start.y, target.x, target.y),
+        )
+
+        while (this.heapIndices.length > 0) {
+            const currentIdx = this.heapPop()
+
+            if (this.visitState[currentIdx] === closedTag) {
+                continue
+            }
+
+            if (currentIdx === targetIdx) {
+                return this.reconstructPath(
+                    currentIdx,
+                    startX,
+                    startY,
+                    targetX,
+                    targetY,
                 )
             }
 
-            for (
-                const neighbor
-                of this.getNeighbors(current)
-            ) {
-                const neighborKey =
-                    this.key(
-                        neighbor.x,
-                        neighbor.y,
-                    )
+            this.visitState[currentIdx] = closedTag
+
+            const cx = currentIdx % this.columns
+            const cy = (currentIdx - cx) / this.columns
+            const currentG = this.gScore[currentIdx]
+
+            for (const [dx, dy, baseCost] of DIRECTIONS) {
+                const nx = cx + dx
+                const ny = cy + dy
+
+                if (!this.isInsideGrid(nx, ny)) {
+                    continue
+                }
+
+                const neighborIdx =
+                    ny * this.columns + nx
 
                 if (
-                    closed.has(neighborKey) ||
-                    this.isBlocked(
-                        neighbor.x,
-                        neighbor.y,
-                    )
+                    this.visitState[neighborIdx] === closedTag ||
+                    this.isBlockedIndex(neighborIdx)
                 ) {
                     continue
                 }
 
+                if (dx !== 0 && dy !== 0) {
+                    if (
+                        this.isBlockedIndex(cy * this.columns + nx) ||
+                        this.isBlockedIndex(ny * this.columns + cx)
+                    ) {
+                        continue
+                    }
+                }
+
+                const nearWall =
+                    this.isNearCardinalObstacle(nx, ny)
                 const tentativeG =
-                    current.g + 1
-
-                const existing =
-                    open.get(neighborKey)
+                    currentG +
+                    baseCost +
+                    (nearWall ? NEAR_WALL_PENALTY : 0)
 
                 if (
-                    existing &&
-                    tentativeG >= existing.g
+                    this.visitState[neighborIdx] === openTag &&
+                    tentativeG >= this.gScore[neighborIdx]
                 ) {
                     continue
                 }
 
-                const node: Node = {
-                    x: neighbor.x,
-                    y: neighbor.y,
-                    g: tentativeG,
-                    h: this.heuristic(
-                        neighbor,
-                        target,
-                    ),
-                    f: 0,
-                    parent: current,
-                }
+                this.gScore[neighborIdx] = tentativeG
+                this.parent[neighborIdx] = currentIdx
+                this.visitState[neighborIdx] = openTag
 
-                node.f =
-                    node.g + node.h
+                const f =
+                    tentativeG +
+                    this.heuristic(nx, ny, target.x, target.y)
 
-                open.set(
-                    neighborKey,
-                    node,
-                )
+                this.heapPush(neighborIdx, f)
             }
         }
 
@@ -255,333 +666,442 @@ export class PatagorasPathfinder {
 
     private buildBlockedGrid(
         wallRects: readonly WorldRect[],
-        padding: number,
     ): void {
-
         for (const rect of wallRects) {
+            const cells =
+                this.getInflatedCellIndices(rect)
 
-            const left =
-                Math.floor(
-                    (rect.x - padding - this.gridOffsetX) /
-                    this.cellSize,
-                )
-
-            const right =
-                Math.floor(
-                    (
-                        rect.x +
-                        rect.width +
-                        padding - 1 -
-                        this.gridOffsetX
-                    ) /
-                    this.cellSize,
-                )
-
-            const top =
-                Math.floor(
-                    (rect.y - padding - this.gridOffsetY) /
-                    this.cellSize,
-                )
-
-            const bottom =
-                Math.floor(
-                    (
-                        rect.y +
-                        rect.height +
-                        padding - 1 -
-                        this.gridOffsetY
-                    ) /
-                    this.cellSize,
-                )
-
-            for (
-                let gridY = top;
-                gridY <= bottom;
-                gridY++
-            ) {
-                for (
-                    let gridX = left;
-                    gridX <= right;
-                    gridX++
-                ) {
-                    if (
-                        this.isInsideGrid(
-                            gridX,
-                            gridY,
-                        )
-                    ) {
-                        this.blocked.add(
-                            this.key(
-                                gridX,
-                                gridY,
-                            ),
-                        )
-                    }
-                }
+            for (const idx of cells) {
+                this.staticBlocked[idx] = 1
             }
         }
+    }
+
+    private getInflatedCellIndices(
+        rect: WorldRect,
+    ): number[] {
+        const minX =
+            rect.x - this.inflatedHalfWidth
+        const maxX =
+            rect.x + rect.width + this.inflatedHalfWidth
+        const minY =
+            rect.y - this.inflatedHalfHeight
+        const maxY =
+            rect.y + rect.height + this.inflatedHalfHeight
+
+        const halfCell = this.cellSize / 2
+
+        const left = Math.max(
+            0,
+            Math.floor(
+                (minX - this.gridOffsetX - halfCell) /
+                this.cellSize,
+            ) + 1,
+        )
+
+        const right = Math.min(
+            this.columns - 1,
+            Math.ceil(
+                (maxX - this.gridOffsetX - halfCell) /
+                this.cellSize,
+            ) - 1,
+        )
+
+        const top = Math.max(
+            0,
+            Math.floor(
+                (minY - this.gridOffsetY - halfCell) /
+                this.cellSize,
+            ) + 1,
+        )
+
+        const bottom = Math.min(
+            this.rows - 1,
+            Math.ceil(
+                (maxY - this.gridOffsetY - halfCell) /
+                this.cellSize,
+            ) - 1,
+        )
+
+        if (left > right || top > bottom) {
+            return []
+        }
+
+        const cells: number[] = []
+
+        for (let gy = top; gy <= bottom; gy++) {
+            const rowOffset = gy * this.columns
+            for (let gx = left; gx <= right; gx++) {
+                cells.push(rowOffset + gx)
+            }
+        }
+
+        return cells
     }
 
     private reconstructPath(
-        endNode: Node,
-        startWorldX?: number,
-        startWorldY?: number,
+        endIdx: number,
+        startWorldX: number,
+        startWorldY: number,
+        targetWorldX: number,
+        targetWorldY: number,
     ): Phaser.Math.Vector2[] {
+        const cellCenters: { x: number; y: number }[] = []
 
-        const cells: GridPoint[] = []
+        let current = endIdx
 
-        let current:
-            Node | undefined =
-            endNode
-
-        while (current) {
-            cells.push({
-                x: current.x,
-                y: current.y,
+        while (current !== -1) {
+            const gx = current % this.columns
+            const gy = (current - gx) / this.columns
+            cellCenters.push({
+                x: this.cellCenterX(gx),
+                y: this.cellCenterY(gy),
             })
-
-            current = current.parent
+            current = this.parent[current]
         }
 
-        cells.reverse()
+        cellCenters.reverse()
 
-        const simplified =
-            this.removeCollinearCells(
-                cells,
-            )
-
-        if (simplified.length > 1) {
-            const firstCenter =
-                this.gridToWorld(
-                    simplified[0].x,
-                    simplified[0].y,
-                )
-
-            const secondCenter =
-                this.gridToWorld(
-                    simplified[1].x,
-                    simplified[1].y,
-                )
-
-            if (
-                startWorldX !== undefined &&
-                startWorldY !== undefined
-            ) {
-                const distToFirst =
-                    Phaser.Math.Distance.Between(
-                        startWorldX,
-                        startWorldY,
-                        firstCenter.x,
-                        firstCenter.y,
-                    )
-
-                const segDx =
-                    secondCenter.x -
-                    firstCenter.x
-
-                const segDy =
-                    secondCenter.y -
-                    firstCenter.y
-
-                const crossDist =
-                    segDx !== 0
-                        ? Math.abs(
-                            startWorldY -
-                            firstCenter.y,
-                        )
-                        : Math.abs(
-                            startWorldX -
-                            firstCenter.x,
-                        )
-
-                const dot =
-                    (startWorldX -
-                        firstCenter.x) *
-                    segDx +
-                    (startWorldY -
-                        firstCenter.y) *
-                    segDy
-
-                if (
-                    distToFirst <= 4 ||
-                    (crossDist <= 3 &&
-                        dot >= 0)
-                ) {
-                    simplified.shift()
-                }
-            } else {
-                simplified.shift()
-            }
-        }
-
-        return simplified.map(
-            cell =>
-                this.gridToWorld(
-                    cell.x,
-                    cell.y,
-                ),
-        )
-    }
-
-    private removeCollinearCells(
-        cells: GridPoint[],
-    ): GridPoint[] {
-
-        if (cells.length <= 2) {
-            return cells
-        }
-
-        const result: GridPoint[] = [
-            cells[0],
+        const rawPts: { x: number; y: number }[] = [
+            ...cellCenters,
         ]
 
-        for (
-            let index = 1;
-            index < cells.length - 1;
-            index++
+        const lastCell =
+            cellCenters[cellCenters.length - 1]
+
+        if (
+            lastCell &&
+            !this.overlapsAnyObstacle(
+                targetWorldX,
+                targetWorldY,
+                this.bodyHalfWidth,
+                this.bodyHalfHeight,
+            ) &&
+            this.hasClearBodyPath(
+                lastCell.x,
+                lastCell.y,
+                targetWorldX,
+                targetWorldY,
+                false,
+            )
         ) {
-            const previous =
-                cells[index - 1]
-
-            const current =
-                cells[index]
-
-            const next =
-                cells[index + 1]
-
-            const previousDx =
-                current.x - previous.x
-
-            const previousDy =
-                current.y - previous.y
-
-            const nextDx =
-                next.x - current.x
-
-            const nextDy =
-                next.y - current.y
-
-            if (
-                previousDx !== nextDx ||
-                previousDy !== nextDy
-            ) {
-                result.push(current)
-            }
+            rawPts.push({
+                x: targetWorldX,
+                y: targetWorldY,
+            })
         }
 
-        result.push(
-            cells[cells.length - 1],
-        )
+        const smoothed: Phaser.Math.Vector2[] = [
+            new Phaser.Math.Vector2(
+                rawPts[0].x,
+                rawPts[0].y,
+            ),
+        ]
+        let anchorIdx = 0
 
-        return result
+        while (anchorIdx < rawPts.length - 1) {
+            let furthest = anchorIdx + 1
+
+            for (
+                let j = rawPts.length - 1;
+                j > anchorIdx + 1;
+                j--
+            ) {
+                if (
+                    this.hasClearBodyPath(
+                        rawPts[anchorIdx].x,
+                        rawPts[anchorIdx].y,
+                        rawPts[j].x,
+                        rawPts[j].y,
+                        true,
+                    )
+                ) {
+                    furthest = j
+                    break
+                }
+            }
+
+            smoothed.push(
+                new Phaser.Math.Vector2(
+                    rawPts[furthest].x,
+                    rawPts[furthest].y,
+                ),
+            )
+            anchorIdx = furthest
+        }
+
+        while (smoothed.length >= 2) {
+            const first = smoothed[0]
+            const second = smoothed[1]
+
+            if (
+                this.hasClearBodyPath(
+                    startWorldX,
+                    startWorldY,
+                    second.x,
+                    second.y,
+                    true,
+                )
+            ) {
+                smoothed.shift()
+                continue
+            }
+
+            const dot =
+                (startWorldX - first.x) * (second.x - first.x) +
+                (startWorldY - first.y) * (second.y - first.y)
+
+            if (
+                dot >= 0 &&
+                this.hasClearBodyPath(
+                    startWorldX,
+                    startWorldY,
+                    second.x,
+                    second.y,
+                    false,
+                )
+            ) {
+                smoothed.shift()
+                continue
+            }
+
+            break
+        }
+
+        if (
+            smoothed.length >= 2 &&
+            Phaser.Math.Distance.Between(
+                startWorldX,
+                startWorldY,
+                smoothed[0].x,
+                smoothed[0].y,
+            ) <= 1 &&
+            this.hasClearBodyPath(
+                startWorldX,
+                startWorldY,
+                smoothed[1].x,
+                smoothed[1].y,
+                true,
+            )
+        ) {
+            smoothed.shift()
+        }
+
+        return smoothed
     }
 
     private findNearestWalkable(
-        point: GridPoint,
+        worldX: number,
+        worldY: number,
+        origin: GridPoint,
+        maxRadius: number,
     ): GridPoint | null {
-
         if (
-            this.isInsideGrid(
-                point.x,
-                point.y,
-            ) &&
-            !this.isBlocked(
-                point.x,
-                point.y,
-            )
+            this.isInsideGrid(origin.x, origin.y) &&
+            !this.isBlockedCell(origin.x, origin.y)
         ) {
-            return point
+            return origin
         }
 
-        const maxRadius = 4
+        const obstacles = this.getActiveObstacles()
+        let bestVisible: GridPoint | null = null
+        let bestVisibleDistSq = Infinity
+        let bestFallback: GridPoint | null = null
+        let bestFallbackDistSq = Infinity
 
-        for (
-            let radius = 1;
-            radius <= maxRadius;
-            radius++
-        ) {
-            for (
-                let y = point.y - radius;
-                y <= point.y + radius;
-                y++
+        const minY = Math.max(0, origin.y - maxRadius)
+        const maxY = Math.min(this.rows - 1, origin.y + maxRadius)
+        const minX = Math.max(0, origin.x - maxRadius)
+        const maxX = Math.min(this.columns - 1, origin.x + maxRadius)
+
+        for (let gy = minY; gy <= maxY; gy++) {
+            const wy = this.cellCenterY(gy)
+            const dy = wy - worldY
+            const dySq = dy * dy
+
+            if (
+                dySq >= bestVisibleDistSq &&
+                dySq >= bestFallbackDistSq
             ) {
-                for (
-                    let x = point.x - radius;
-                    x <= point.x + radius;
-                    x++
+                continue
+            }
+
+            for (let gx = minX; gx <= maxX; gx++) {
+                if (this.isBlockedCell(gx, gy)) {
+                    continue
+                }
+
+                const wx = this.cellCenterX(gx)
+                const dx = wx - worldX
+                const distSq = dx * dx + dySq
+
+                if (distSq < bestFallbackDistSq) {
+                    bestFallbackDistSq = distSq
+                    bestFallback = { x: gx, y: gy }
+                }
+
+                if (
+                    distSq < bestVisibleDistSq &&
+                    hasLineOfSight(
+                        worldX,
+                        worldY,
+                        wx,
+                        wy,
+                        obstacles,
+                    )
                 ) {
-                    const isBorder =
-                        x === point.x - radius ||
-                        x === point.x + radius ||
-                        y === point.y - radius ||
-                        y === point.y + radius
-
-                    if (!isBorder) {
-                        continue
-                    }
-
-                    if (
-                        this.isInsideGrid(x, y) &&
-                        !this.isBlocked(x, y)
-                    ) {
-                        return { x, y }
-                    }
+                    bestVisibleDistSq = distSq
+                    bestVisible = { x: gx, y: gy }
                 }
             }
         }
 
-        return null
+        return bestVisible ?? bestFallback
     }
 
-    private getNeighbors(
-        node: GridPoint,
-    ): GridPoint[] {
+    private overlapsAnyObstacle(
+        x: number,
+        y: number,
+        halfW: number,
+        halfH: number,
+    ): boolean {
+        const left = x - halfW
+        const right = x + halfW
+        const top = y - halfH
+        const bottom = y + halfH
 
-        const candidates = [
-            { x: node.x + 1, y: node.y },
-            { x: node.x - 1, y: node.y },
-            { x: node.x, y: node.y + 1 },
-            { x: node.x, y: node.y - 1 },
-        ]
-
-        return candidates.filter(
-            point =>
-                this.isInsideGrid(
-                    point.x,
-                    point.y,
-                ),
-        )
-    }
-
-    private getLowestF(
-        open: Map<string, Node>,
-    ): Node | undefined {
-
-        let best: Node | undefined
-
-        for (const node of open.values()) {
+        for (const r of this.staticObstacles) {
             if (
-                !best ||
-                node.f < best.f ||
-                (
-                    node.f === best.f &&
-                    node.h < best.h
-                )
+                right > r.x &&
+                left < r.x + r.width &&
+                bottom > r.y &&
+                top < r.y + r.height
             ) {
-                best = node
+                return true
             }
         }
 
-        return best
+        for (const entry of this.dynamicObstacles.values()) {
+            const r = entry.rect
+            if (
+                right > r.x &&
+                left < r.x + r.width &&
+                bottom > r.y &&
+                top < r.y + r.height
+            ) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private isNearCardinalObstacle(
+        gx: number,
+        gy: number,
+    ): boolean {
+        const idx = gy * this.columns + gx
+
+        if (gx > 0 && this.isBlockedIndex(idx - 1)) {
+            return true
+        }
+        if (
+            gx + 1 < this.columns &&
+            this.isBlockedIndex(idx + 1)
+        ) {
+            return true
+        }
+        if (gy > 0 && this.isBlockedIndex(idx - this.columns)) {
+            return true
+        }
+        if (
+            gy + 1 < this.rows &&
+            this.isBlockedIndex(idx + this.columns)
+        ) {
+            return true
+        }
+
+        return false
+    }
+
+    private heapPush(
+        idx: number,
+        f: number,
+    ): void {
+        let i = this.heapIndices.length
+        this.heapIndices.push(idx)
+        this.heapF.push(f)
+
+        while (i > 0) {
+            const p = (i - 1) >> 1
+            if (this.heapF[p] <= f) {
+                break
+            }
+            this.heapIndices[i] = this.heapIndices[p]
+            this.heapF[i] = this.heapF[p]
+            i = p
+        }
+
+        this.heapIndices[i] = idx
+        this.heapF[i] = f
+    }
+
+    private heapPop(): number {
+        const top = this.heapIndices[0]
+        const lastIdx = this.heapIndices.pop()!
+        const lastF = this.heapF.pop()!
+        const length = this.heapIndices.length
+
+        if (length > 0) {
+            let i = 0
+
+            while (true) {
+                const left = (i << 1) + 1
+                const right = left + 1
+                let smallest = i
+
+                if (
+                    left < length &&
+                    this.heapF[left] < this.heapF[smallest]
+                ) {
+                    smallest = left
+                }
+
+                if (
+                    right < length &&
+                    this.heapF[right] < this.heapF[smallest]
+                ) {
+                    smallest = right
+                }
+
+                if (smallest === i) {
+                    break
+                }
+
+                this.heapIndices[i] = this.heapIndices[smallest]
+                this.heapF[i] = this.heapF[smallest]
+                i = smallest
+            }
+
+            this.heapIndices[i] = lastIdx
+            this.heapF[i] = lastF
+        }
+
+        return top
     }
 
     private heuristic(
-        from: GridPoint,
-        to: GridPoint,
+        ax: number,
+        ay: number,
+        bx: number,
+        by: number,
     ): number {
+        const dx = Math.abs(ax - bx)
+        const dy = Math.abs(ay - by)
         return (
-            Math.abs(from.x - to.x) +
-            Math.abs(from.y - to.y)
+            dx +
+            dy +
+            (Math.SQRT2 - 2) * Math.min(dx, dy)
         )
     }
 
@@ -589,18 +1109,19 @@ export class PatagorasPathfinder {
         x: number,
         y: number,
     ): GridPoint {
+        const halfCell = this.cellSize / 2
         return {
             x: Phaser.Math.Clamp(
-                Math.floor(
-                    (x - this.gridOffsetX) /
+                Math.round(
+                    (x - this.gridOffsetX - halfCell) /
                     this.cellSize,
                 ),
                 0,
                 this.columns - 1,
             ),
             y: Phaser.Math.Clamp(
-                Math.floor(
-                    (y - this.gridOffsetY) /
+                Math.round(
+                    (y - this.gridOffsetY - halfCell) /
                     this.cellSize,
                 ),
                 0,
@@ -609,37 +1130,48 @@ export class PatagorasPathfinder {
         }
     }
 
+    private cellCenterX(gx: number): number {
+        return (
+            this.gridOffsetX +
+            gx * this.cellSize +
+            this.cellSize / 2
+        )
+    }
+
+    private cellCenterY(gy: number): number {
+        return (
+            this.gridOffsetY +
+            gy * this.cellSize +
+            this.cellSize / 2
+        )
+    }
+
     private gridToWorld(
         x: number,
         y: number,
     ): Phaser.Math.Vector2 {
         return new Phaser.Math.Vector2(
-            this.gridOffsetX +
-            x * this.cellSize +
-            this.cellSize / 2,
-            this.gridOffsetY +
-            y * this.cellSize +
-            this.cellSize / 2,
+            this.cellCenterX(x),
+            this.cellCenterY(y),
         )
     }
 
-    private isBlocked(
+    private isBlockedCell(
         x: number,
         y: number,
     ): boolean {
-        const cellKey = this.key(x, y)
+        return this.isBlockedIndex(
+            y * this.columns + x,
+        )
+    }
 
-        if (this.blocked.has(cellKey)) {
-            return true
-        }
-
-        for (const cells of this.dynamicObstacles.values()) {
-            if (cells.has(cellKey)) {
-                return true
-            }
-        }
-
-        return false
+    private isBlockedIndex(
+        idx: number,
+    ): boolean {
+        return (
+            this.staticBlocked[idx] !== 0 ||
+            this.dynamicBlockedCount[idx] !== 0
+        )
     }
 
     private isInsideGrid(
@@ -652,12 +1184,5 @@ export class PatagorasPathfinder {
             x < this.columns &&
             y < this.rows
         )
-    }
-
-    private key(
-        x: number,
-        y: number,
-    ): string {
-        return `${x},${y}`
     }
 }

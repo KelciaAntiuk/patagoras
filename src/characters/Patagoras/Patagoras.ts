@@ -21,6 +21,9 @@ export class Patagoras {
 
     private speedMultiplier = 1
 
+    private readonly facingDirection =
+        new Phaser.Math.Vector2(0, 1)
+
     constructor(
         scene: Phaser.Scene,
         x: number,
@@ -46,6 +49,9 @@ export class Patagoras {
                 PATAGORAS_CONFIG.bodyOffsetX,
                 PATAGORAS_CONFIG.bodyOffsetY,
             )
+
+        ;(this.sprite.body as Phaser.Physics.Arcade.Body | null)
+            ?.updateFromGameObject()
 
         this.sprite
             .setCollideWorldBounds(
@@ -81,6 +87,54 @@ export class Patagoras {
         return this.sprite.body
             ? this.sprite.body.center.y
             : this.sprite.y
+    }
+
+    public setBodyCenter(
+        centerX: number,
+        centerY: number,
+    ): void {
+        const body =
+            this.sprite.body as
+                | Phaser.Physics.Arcade.Body
+                | null
+
+        if (!body) {
+            this.sprite.setPosition(centerX, centerY)
+            return
+        }
+
+        const spriteX =
+            centerX -
+            this.sprite.scaleX *
+                (body.offset.x - this.sprite.displayOriginX) -
+            body.halfWidth
+        const spriteY =
+            centerY -
+            this.sprite.scaleY *
+                (body.offset.y - this.sprite.displayOriginY) -
+            body.halfHeight
+
+        this.sprite.setPosition(spriteX, spriteY)
+        body.updateFromGameObject()
+        body.prev.copy(body.position)
+        body.prevFrame.copy(body.position)
+    }
+
+    public getFacingDirection(): Phaser.Math.Vector2 {
+        return this.facingDirection.clone()
+    }
+
+    public setFacingDirection(
+        x: number,
+        y: number,
+    ): void {
+        const direction =
+            new Phaser.Math.Vector2(x, y)
+
+        if (direction.lengthSq() > 0) {
+            direction.normalize()
+            this.facingDirection.copy(direction)
+        }
     }
 
     public setErrorCount(
@@ -123,6 +177,13 @@ export class Patagoras {
         )
     }
 
+    public getLostSightChaseSpeed(): number {
+        return (
+            PATAGORAS_CONFIG.lostSightChaseSpeed *
+            this.speedMultiplier
+        )
+    }
+
     public moveTowards(
         x: number,
         y: number,
@@ -146,6 +207,7 @@ export class Patagoras {
         }
 
         direction.normalize()
+        this.facingDirection.copy(direction)
 
         this.sprite
             .setVelocity(
@@ -177,6 +239,7 @@ export class Patagoras {
             direction.length() > 0
         ) {
             direction.normalize()
+            this.facingDirection.copy(direction)
         }
 
         const currentSpeed =

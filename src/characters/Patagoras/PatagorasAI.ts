@@ -1,5 +1,18 @@
 import Phaser from 'phaser'
 
+import type {
+    WorldRect,
+} from '../../system/Collision/Collision.types'
+
+import {
+    getActorCenter,
+    hasLineOfSight,
+} from '../../system/Collision/LineOfSight'
+
+import type {
+    ObstacleProvider,
+} from '../../system/Collision/LineOfSight'
+
 import {
     PATAGORAS_CONFIG,
 } from './Patagoras.config'
@@ -16,6 +29,13 @@ import {
     PatagorasPathfinder,
 } from './PatagorasPathfinder'
 
+export interface PatagorasAIOptions {
+    readonly getVisionObstacles?: ObstacleProvider
+    readonly getObstacles?: ObstacleProvider
+    readonly isSameRoom?: () => boolean
+    readonly patrolBounds?: WorldRect
+}
+
 export class PatagorasAI {
 
     private currentPath:
@@ -25,19 +45,32 @@ export class PatagorasAI {
 
     private nextPathUpdateAt = 0
 
-    private nextPlayerCheckAt = 0
-
     private stunTimer?:
         Phaser.Time.TimerEvent
 
-    private searchTimer?:
-        Phaser.Time.TimerEvent
-
-    private lastKnownPlayerPosition =
-        new Phaser.Math.Vector2()
-
     private wanderTarget?:
         Phaser.Math.Vector2
+
+    private hasDetectedPlayer = false
+
+    private hasVisualContact = false
+
+    private hasStuckSample = false
+
+    private lastStuckCheckAt = 0
+
+    private readonly lastStuckCheckPosition =
+        new Phaser.Math.Vector2()
+
+    private hasLastPathTarget = false
+
+    private readonly lastPathTarget =
+        new Phaser.Math.Vector2()
+
+    private hasPrevStepPosition = false
+
+    private readonly prevStepPosition =
+        new Phaser.Math.Vector2()
 
     constructor(
         private readonly scene:
@@ -51,6 +84,9 @@ export class PatagorasAI {
 
         private readonly pathfinder:
             PatagorasPathfinder,
+
+        private readonly options?:
+            PatagorasAIOptions,
     ) {
         this.patagoras.setState(
             PatagorasState.Wander,
@@ -64,6 +100,7 @@ export class PatagorasAI {
         ) {
 
             case PatagorasState.Patrol:
+            case PatagorasState.Wander:
                 this.updateWander()
                 break
 
@@ -72,26 +109,93 @@ export class PatagorasAI {
                 break
 
             case PatagorasState.Search:
-                this.updateSearch()
-                break
-
-            case PatagorasState.Wander:
-                this.updateWander()
+                if (this.hasDetectedPlayer) {
+                    this.resumeChase()
+                } else {
+                    this.startWander()
+                }
                 break
 
             case PatagorasState.Stunned:
-                this.patagoras.stop()
-                break
-
             case PatagorasState.Food:
-                this.patagoras.stop()
-                break
-
             case PatagorasState.Idle:
             default:
                 this.patagoras.stop()
                 break
         }
+    }
+
+    public canSeePlayer(): boolean {
+        if (
+            this.options?.isSameRoom &&
+            !this.options.isSameRoom()
+        ) {
+            return false
+        }
+
+        const duckX =
+            this.patagoras.getBodyCenterX()
+        const duckY =
+            this.patagoras.getBodyCenterY()
+
+        const { x: playerX, y: playerY } =
+            getActorCenter(this.player)
+
+        const dx = playerX - duckX
+        const dy = playerY - duckY
+        const distance = Math.hypot(dx, dy)
+
+        if (
+            distance >
+            PATAGORAS_CONFIG.detectionRadius
+        ) {
+            return false
+        }
+
+        if (distance > 1) {
+            const facing =
+                this.patagoras.getFacingDirection()
+
+            if (facing.lengthSq() > 0) {
+                const cosHalfFov = Math.cos(
+                    Phaser.Math.DegToRad(
+                        PATAGORAS_CONFIG.visionFovDegrees / 2,
+                    ),
+                )
+                const dot =
+                    (dx / distance) * facing.x +
+                    (dy / distance) * facing.y
+
+                if (dot < cosHalfFov - 1e-6) {
+                    return false
+                }
+            }
+        }
+
+        const obstacles =
+            this.options?.getVisionObstacles?.() ??
+            this.options?.getObstacles?.() ??
+            this.pathfinder.getActiveObstacles()
+
+        return hasLineOfSight(
+            duckX,
+            duckY,
+            playerX,
+            playerY,
+            obstacles,
+        )
+    }
+
+    public hasPlayerBeenDetected(): boolean {
+        return this.hasDetectedPlayer
+    }
+
+    public hasVisualContactWithPlayer(): boolean {
+        return this.hasVisualContact
+    }
+
+    public getCurrentPath(): readonly Phaser.Math.Vector2[] {
+        return this.currentPath
     }
 
     public stun(
@@ -101,14 +205,10 @@ export class PatagorasAI {
         this.stunTimer
             ?.remove(false)
 
-        this.searchTimer
-            ?.remove(false)
-
-        this.searchTimer =
-            undefined
-
         this.wanderTarget =
             undefined
+
+        this.hasVisualContact = false
 
         this.clearPath()
 
@@ -126,9 +226,30 @@ export class PatagorasAI {
                     this.stunTimer =
                         undefined
 
-                    this.startWander()
+                    if (this.hasDetectedPlayer) {
+                        this.resumeChase()
+                    } else {
+                        this.startWander()
+                    }
                 },
             )
+    }
+
+    public reset(): void {
+        this.stunTimer
+            ?.remove(false)
+
+        this.stunTimer =
+            undefined
+
+        this.hasDetectedPlayer = false
+        this.hasVisualContact = false
+        this.wanderTarget = undefined
+        this.clearPath()
+        this.patagoras.stop()
+        this.patagoras.setState(
+            PatagorasState.Wander,
+        )
     }
 
     public destroy(): void {
@@ -136,13 +257,7 @@ export class PatagorasAI {
         this.stunTimer
             ?.remove(false)
 
-        this.searchTimer
-            ?.remove(false)
-
         this.stunTimer =
-            undefined
-
-        this.searchTimer =
             undefined
 
         this.wanderTarget =
@@ -153,164 +268,60 @@ export class PatagorasAI {
 
     private updateChase(): void {
 
-        const distanceToPlayer =
-            this.getDistanceToPlayer()
+        this.hasVisualContact =
+            this.canSeePlayer()
 
-        const playerX =
-            this.getPlayerX()
+        const { x: playerX, y: playerY } =
+            getActorCenter(this.player)
 
-        const playerY =
-            this.getPlayerY()
-
-        this.lastKnownPlayerPosition
-            .set(
-                playerX,
-                playerY,
-            )
-
-        if (
-            distanceToPlayer >=
-            PATAGORAS_CONFIG
-                .loseTargetRadius
-        ) {
-
-            this.startSearch()
-
-            return
-        }
+        const speed = this.hasVisualContact
+            ? this.patagoras.getChaseSpeed()
+            : this.patagoras.getLostSightChaseSpeed()
 
         const hasPath =
             this.followPathTo(
                 playerX,
                 playerY,
-                this.patagoras
-                    .getChaseSpeed(),
+                speed,
                 true,
             )
 
         /*
-         * O jogador está próximo,
-         * mas não existe caminho
-         * acessível até ele.
-         *
-         * Em vez de ficar parado,
-         * Patágoras continua procurando.
+         * Após a primeira detecção, a perseguição
+         * é permanente: se não houver rota no
+         * momento (ex.: porta fechada), aguarda o
+         * próximo recálculo sem voltar à patrulha.
          */
         if (!hasPath) {
-            this.startWander()
-        }
-    }
-
-    private updateSearch(): void {
-
-        /*
-         * Enquanto procura, verifica
-         * se consegue alcançar novamente
-         * o jogador.
-         */
-        if (
-            this.tryStartChase()
-        ) {
-            return
-        }
-
-        const distanceToLastPosition =
-            Phaser.Math.Distance.Between(
-                this.patagoras.getBodyCenterX(),
-                this.patagoras.getBodyCenterY(),
-                this.lastKnownPlayerPosition.x,
-                this.lastKnownPlayerPosition.y,
-            )
-
-        /*
-         * Ainda não chegou onde
-         * viu o jogador pela última vez.
-         */
-        if (
-            distanceToLastPosition >
-            PATAGORAS_CONFIG
-                .searchReachDistance
-        ) {
-
-            const hasPath =
-                this.followPathTo(
-                    this.lastKnownPlayerPosition.x,
-                    this.lastKnownPlayerPosition.y,
-                    this.patagoras
-                        .getChaseSpeed(),
-                    false,
-                )
-
-            /*
-             * Nem a última posição
-             * conhecida é alcançável.
-             *
-             * Continua procurando
-             * aleatoriamente.
-             */
-            if (!hasPath) {
-                this.startWander()
-            }
-
-            return
-        }
-
-        /*
-         * Chegou à última posição
-         * conhecida.
-         */
-        this.patagoras.stop()
-
-        /*
-         * O cronômetro começa somente
-         * depois que ele chega ao local.
-         */
-        if (!this.searchTimer) {
-
-            this.searchTimer =
-                this.scene.time.delayedCall(
-                    PATAGORAS_CONFIG
-                        .searchDurationMs,
-                    () => {
-
-                        this.searchTimer =
-                            undefined
-
-                        if (
-                            this.patagoras
-                                .getState() !==
-                            PatagorasState.Search
-                        ) {
-                            return
-                        }
-
-                        this.startWander()
-                    },
-                )
+            this.patagoras.stop()
         }
     }
 
     private updateWander(): void {
 
-        /*
-         * Não basta o jogador estar
-         * perto.
-         *
-         * Patágoras só entra em CHASE
-         * se realmente existir um
-         * caminho até ele.
-         */
-        if (
-            this.tryStartChase()
-        ) {
+        if (this.hasDetectedPlayer) {
+            this.resumeChase()
+            return
+        }
+
+        if (this.canSeePlayer()) {
+            this.hasDetectedPlayer = true
+            this.hasVisualContact = true
+            this.wanderTarget = undefined
+            this.clearPath()
+            this.patagoras.setState(
+                PatagorasState.Chase,
+            )
+            this.updateChase()
             return
         }
 
         if (!this.wanderTarget) {
-
             this.chooseWanderTarget()
 
-            return
+            if (!this.wanderTarget) {
+                return
+            }
         }
 
         const distanceToTarget =
@@ -359,131 +370,21 @@ export class PatagorasAI {
         }
     }
 
-    private tryStartChase():
-        boolean {
-
-        const distanceToPlayer =
-            this.getDistanceToPlayer()
-
-        if (
-            distanceToPlayer >
-            PATAGORAS_CONFIG
-                .detectionRadius
-        ) {
-            return false
-        }
-
-        const now =
-            this.scene.time.now
-
-        /*
-         * Evita executar A* a cada frame
-         * quando o jogador está perto,
-         * mas inacessível.
-         */
-        if (
-            now <
-            this.nextPlayerCheckAt
-        ) {
-            return false
-        }
-
-        this.nextPlayerCheckAt =
-            now +
-            PATAGORAS_CONFIG
-                .playerReachabilityCheckMs
-
-        const playerX =
-            this.getPlayerX()
-
-        const playerY =
-            this.getPlayerY()
-
-        const path =
-            this.pathfinder.findPath(
-                this.patagoras.getBodyCenterX(),
-                this.patagoras.getBodyCenterY(),
-                playerX,
-                playerY,
-            )
-
-        /*
-         * Jogador detectado,
-         * porém sem caminho.
-         *
-         * Continua no estado atual.
-         */
-        if (
-            path.length === 0
-        ) {
-            return false
-        }
-
-        this.searchTimer
-            ?.remove(false)
-
-        this.searchTimer =
-            undefined
-
-        this.wanderTarget =
-            undefined
-
-        this.lastKnownPlayerPosition
-            .set(
-                playerX,
-                playerY,
-            )
-
+    private resumeChase(): void {
+        this.wanderTarget = undefined
+        this.clearPath()
         this.patagoras.setState(
             PatagorasState.Chase,
         )
-
-        /*
-         * Aproveita o caminho que
-         * acabamos de calcular.
-         */
-        this.currentPath =
-            path
-
-        this.waypointIndex =
-            0
-
-        this.nextPathUpdateAt =
-            now +
-            PATAGORAS_CONFIG
-                .pathRecalculateMs
-
-        return true
-    }
-
-    private startSearch(): void {
-
-        this.searchTimer
-            ?.remove(false)
-
-        this.searchTimer =
-            undefined
-
-        this.wanderTarget =
-            undefined
-
-        this.patagoras.setState(
-            PatagorasState.Search,
-        )
-
-        this.clearPath()
+        this.updateChase()
     }
 
     private startWander(): void {
 
-        this.searchTimer
-            ?.remove(false)
-
-        this.searchTimer =
-            undefined
-
         this.wanderTarget =
             undefined
+
+        this.hasVisualContact = false
 
         this.clearPath()
 
@@ -499,6 +400,72 @@ export class PatagorasAI {
 
         const originY =
             this.patagoras.getBodyCenterY()
+
+        const patrolBounds =
+            this.options?.patrolBounds
+
+        if (patrolBounds) {
+            const candidates =
+                this.pathfinder.getWalkablePointsInBounds(
+                    patrolBounds,
+                    2,
+                )
+
+            if (candidates.length > 0) {
+                const minDist =
+                    PATAGORAS_CONFIG.wanderMinDistance
+                const farCandidates =
+                    candidates.filter(
+                        point =>
+                            Phaser.Math.Distance.Between(
+                                originX,
+                                originY,
+                                point.x,
+                                point.y,
+                            ) >= minDist,
+                    )
+
+                const pool =
+                    farCandidates.length > 0
+                        ? farCandidates
+                        : candidates
+
+                for (
+                    let attempt = 0;
+                    attempt < 30;
+                    attempt++
+                ) {
+                    const candidate =
+                        pool[
+                            Phaser.Math.Between(
+                                0,
+                                pool.length - 1,
+                            )
+                        ]
+
+                    const path =
+                        this.pathfinder.findPath(
+                            originX,
+                            originY,
+                            candidate.x,
+                            candidate.y,
+                            { snapTarget: false },
+                        )
+
+                    if (path.length === 0) {
+                        continue
+                    }
+
+                    this.setWanderPath(
+                        path,
+                        originX,
+                        originY,
+                    )
+
+                    return
+                }
+            }
+        }
 
         for (
             let attempt = 0;
@@ -530,12 +497,22 @@ export class PatagorasAI {
                 Math.sin(angle) *
                 distance
 
+            if (
+                !this.pathfinder.isWorldPointWalkable(
+                    targetX,
+                    targetY,
+                )
+            ) {
+                continue
+            }
+
             const path =
                 this.pathfinder.findPath(
                     originX,
                     originY,
                     targetX,
                     targetY,
+                    { snapTarget: false },
                 )
 
             if (
@@ -544,27 +521,11 @@ export class PatagorasAI {
                 continue
             }
 
-            const reachableTarget =
-                path[
-                path.length - 1
-                ]
-
-            this.wanderTarget =
-                new Phaser.Math.Vector2(
-                    reachableTarget.x,
-                    reachableTarget.y,
-                )
-
-            this.currentPath =
-                path
-
-            this.waypointIndex =
-                0
-
-            this.nextPathUpdateAt =
-                this.scene.time.now +
-                PATAGORAS_CONFIG
-                    .pathRecalculateMs
+            this.setWanderPath(
+                path,
+                originX,
+                originY,
+            )
 
             return
         }
@@ -584,6 +545,33 @@ export class PatagorasAI {
         this.patagoras.stop()
     }
 
+    private setWanderPath(
+        path: Phaser.Math.Vector2[],
+        originX: number,
+        originY: number,
+    ): void {
+        const reachableTarget = path[path.length - 1]
+
+        this.wanderTarget =
+            new Phaser.Math.Vector2(
+                reachableTarget.x,
+                reachableTarget.y,
+            )
+
+        this.currentPath = path
+        this.waypointIndex = 0
+        this.nextPathUpdateAt =
+            this.scene.time.now +
+            PATAGORAS_CONFIG.pathRecalculateMs
+        this.lastPathTarget.set(
+            reachableTarget.x,
+            reachableTarget.y,
+        )
+        this.hasLastPathTarget = true
+        this.hasPrevStepPosition = false
+        this.resetStuckTracker(originX, originY)
+    }
+
     private followPathTo(
         targetX: number,
         targetY: number,
@@ -600,19 +588,54 @@ export class PatagorasAI {
         const currentY =
             this.patagoras.getBodyCenterY()
 
-        const needsNewPath =
-            this.currentPath.length === 0 ||
-            this.waypointIndex >=
-            this.currentPath.length ||
-            (
-                dynamicTarget &&
-                now >=
-                this.nextPathUpdateAt
-            )
+        const hasActivePath =
+            this.currentPath.length > 0 &&
+            this.waypointIndex < this.currentPath.length
 
-        if (needsNewPath) {
+        let shouldRecalculate = !hasActivePath
 
-            const path =
+        if (
+            !shouldRecalculate &&
+            dynamicTarget &&
+            now >= this.nextPathUpdateAt
+        ) {
+            const targetMoved = this.hasLastPathTarget
+                ? Phaser.Math.Distance.Between(
+                    this.lastPathTarget.x,
+                    this.lastPathTarget.y,
+                    targetX,
+                    targetY,
+                )
+                : Infinity
+
+            const remainingClear =
+                this.isRemainingPathClear(currentX, currentY)
+
+            const directToTarget =
+                this.pathfinder.hasClearBodyPath(
+                    currentX,
+                    currentY,
+                    targetX,
+                    targetY,
+                    true,
+                )
+
+            if (
+                remainingClear &&
+                !directToTarget &&
+                targetMoved <
+                    PATAGORAS_CONFIG.pathTargetRepathDistance
+            ) {
+                this.nextPathUpdateAt =
+                    now + PATAGORAS_CONFIG.pathRecalculateMs
+            } else {
+                shouldRecalculate = true
+            }
+        }
+
+        if (shouldRecalculate) {
+
+            const newPath =
                 this.pathfinder.findPath(
                     currentX,
                     currentY,
@@ -630,111 +653,351 @@ export class PatagorasAI {
              * o destino.
              */
             if (
-                path.length === 0
+                newPath.length === 0
             ) {
 
                 this.currentPath = []
 
                 this.waypointIndex = 0
 
+                this.hasStuckSample = false
+                this.hasLastPathTarget = false
+                this.hasPrevStepPosition = false
+
                 this.patagoras.stop()
 
                 return false
             }
 
-            this.currentPath =
-                path
+            let keepOldPath = false
 
-            this.waypointIndex = 0
+            if (
+                dynamicTarget &&
+                hasActivePath &&
+                this.isRemainingPathClear(currentX, currentY)
+            ) {
+                const oldRemaining =
+                    this.currentPath.slice(this.waypointIndex)
+                const oldEnd =
+                    oldRemaining[oldRemaining.length - 1]
+                const endShift =
+                    Phaser.Math.Distance.Between(
+                        oldEnd.x,
+                        oldEnd.y,
+                        targetX,
+                        targetY,
+                    )
+
+                if (endShift <= 28) {
+                    const oldDir = new Phaser.Math.Vector2(
+                        oldRemaining[0].x - currentX,
+                        oldRemaining[0].y - currentY,
+                    )
+                    const newDir = new Phaser.Math.Vector2(
+                        newPath[0].x - currentX,
+                        newPath[0].y - currentY,
+                    )
+
+                    if (
+                        oldDir.lengthSq() > 1e-4 &&
+                        newDir.lengthSq() > 1e-4
+                    ) {
+                        oldDir.normalize()
+                        newDir.normalize()
+                        const dot =
+                            oldDir.x * newDir.x +
+                            oldDir.y * newDir.y
+
+                        if (dot < -0.35) {
+                            const oldLen =
+                                this.computePathLength(
+                                    currentX,
+                                    currentY,
+                                    oldRemaining,
+                                    targetX,
+                                    targetY,
+                                )
+                            const newLen =
+                                this.computePathLength(
+                                    currentX,
+                                    currentY,
+                                    newPath,
+                                    targetX,
+                                    targetY,
+                                )
+
+                            if (
+                                oldLen - newLen <
+                                PATAGORAS_CONFIG.pathFlipMinSavings
+                            ) {
+                                keepOldPath = true
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!keepOldPath) {
+                this.currentPath =
+                    newPath
+
+                this.waypointIndex = 0
+                this.lastPathTarget.set(targetX, targetY)
+                this.hasLastPathTarget = true
+                this.resetStuckTracker(currentX, currentY)
+            }
         }
 
-        const waypoint =
+        while (this.waypointIndex < this.currentPath.length) {
+            const nextWaypoint =
+                this.currentPath[this.waypointIndex + 1]
+
+            if (
+                nextWaypoint &&
+                this.pathfinder.hasClearBodyPath(
+                    currentX,
+                    currentY,
+                    nextWaypoint.x,
+                    nextWaypoint.y,
+                    true,
+                )
+            ) {
+                this.waypointIndex++
+                continue
+            }
+
+            const waypoint =
+                this.currentPath[this.waypointIndex]
+
+            const distanceToWaypoint =
+                Phaser.Math.Distance.Between(
+                    currentX,
+                    currentY,
+                    waypoint.x,
+                    waypoint.y,
+                )
+
+            if (
+                distanceToWaypoint <=
+                PATAGORAS_CONFIG
+                    .waypointReachDistance
+            ) {
+                this.waypointIndex++
+                continue
+            }
+
+            if (
+                this.hasPrevStepPosition &&
+                this.didCrossWaypoint(
+                    this.prevStepPosition.x,
+                    this.prevStepPosition.y,
+                    currentX,
+                    currentY,
+                    waypoint.x,
+                    waypoint.y,
+                )
+            ) {
+                this.waypointIndex++
+                continue
+            }
+
+            break
+        }
+
+        const activeWaypoint =
             this.currentPath[
             this.waypointIndex
             ]
 
-        if (!waypoint) {
-
-            this.patagoras.stop()
-
-            return false
-        }
-
-        const distanceToWaypoint =
-            Phaser.Math.Distance.Between(
-                currentX,
-                currentY,
-                waypoint.x,
-                waypoint.y,
-            )
-
-        if (
-            distanceToWaypoint <=
-            PATAGORAS_CONFIG
-                .waypointReachDistance
-        ) {
-
-            this.waypointIndex++
-
-            const nextWaypoint =
-                this.currentPath[
-                this.waypointIndex
-                ]
-
-            if (!nextWaypoint) {
-
-                if (dynamicTarget) {
-                    this.patagoras.moveTowards(
-                        targetX,
-                        targetY,
-                        speed,
-                    )
-                } else {
-                    this.patagoras.stop()
-                }
-
-                return true
+        if (!activeWaypoint) {
+            if (
+                dynamicTarget &&
+                this.pathfinder.hasClearBodyPath(
+                    currentX,
+                    currentY,
+                    targetX,
+                    targetY,
+                    false,
+                )
+            ) {
+                this.patagoras.moveTowards(
+                    targetX,
+                    targetY,
+                    speed,
+                )
+                this.prevStepPosition.set(currentX, currentY)
+                this.hasPrevStepPosition = true
+            } else {
+                this.clearPath()
+                this.patagoras.stop()
             }
-
-            this.patagoras.moveTowards(
-                nextWaypoint.x,
-                nextWaypoint.y,
-                speed,
-            )
 
             return true
         }
 
+        if (!this.hasStuckSample) {
+            this.resetStuckTracker(currentX, currentY)
+        } else if (
+            now - this.lastStuckCheckAt >=
+            PATAGORAS_CONFIG.stuckCheckIntervalMs
+        ) {
+            const moved =
+                Phaser.Math.Distance.Between(
+                    this.lastStuckCheckPosition.x,
+                    this.lastStuckCheckPosition.y,
+                    currentX,
+                    currentY,
+                )
+
+            this.lastStuckCheckAt = now
+            this.lastStuckCheckPosition.set(
+                currentX,
+                currentY,
+            )
+
+            if (moved < PATAGORAS_CONFIG.stuckMinDistance) {
+                this.clearPath()
+            }
+        }
+
         this.patagoras.moveTowards(
-            waypoint.x,
-            waypoint.y,
+            activeWaypoint.x,
+            activeWaypoint.y,
             speed,
         )
+
+        this.prevStepPosition.set(currentX, currentY)
+        this.hasPrevStepPosition = true
 
         return true
     }
 
-    private getPlayerX(): number {
-        return this.player.body
-            ? this.player.body.center.x
-            : this.player.x
+    private isRemainingPathClear(
+        currentX: number,
+        currentY: number,
+    ): boolean {
+        if (this.waypointIndex >= this.currentPath.length) {
+            return false
+        }
+
+        let prevX = currentX
+        let prevY = currentY
+
+        for (
+            let i = this.waypointIndex;
+            i < this.currentPath.length;
+            i++
+        ) {
+            const wp = this.currentPath[i]
+            if (
+                !this.pathfinder.hasClearBodyPath(
+                    prevX,
+                    prevY,
+                    wp.x,
+                    wp.y,
+                    false,
+                )
+            ) {
+                return false
+            }
+            prevX = wp.x
+            prevY = wp.y
+        }
+
+        return true
     }
 
-    private getPlayerY(): number {
-        return this.player.body
-            ? this.player.body.center.y
-            : this.player.y
-    }
+    private computePathLength(
+        startX: number,
+        startY: number,
+        waypoints: readonly Phaser.Math.Vector2[],
+        finalTargetX: number,
+        finalTargetY: number,
+    ): number {
+        let total = 0
+        let prevX = startX
+        let prevY = startY
 
-    private getDistanceToPlayer():
-        number {
+        for (const wp of waypoints) {
+            total += Phaser.Math.Distance.Between(
+                prevX,
+                prevY,
+                wp.x,
+                wp.y,
+            )
+            prevX = wp.x
+            prevY = wp.y
+        }
 
-        return Phaser.Math.Distance.Between(
-            this.patagoras.getBodyCenterX(),
-            this.patagoras.getBodyCenterY(),
-            this.getPlayerX(),
-            this.getPlayerY(),
+        total += Phaser.Math.Distance.Between(
+            prevX,
+            prevY,
+            finalTargetX,
+            finalTargetY,
         )
+
+        return total
+    }
+
+    private didCrossWaypoint(
+        prevX: number,
+        prevY: number,
+        curX: number,
+        curY: number,
+        wpX: number,
+        wpY: number,
+    ): boolean {
+        const segDx = curX - prevX
+        const segDy = curY - prevY
+        const segLenSq = segDx * segDx + segDy * segDy
+
+        if (segLenSq <= 1e-6) {
+            return false
+        }
+
+        const t = Phaser.Math.Clamp(
+            ((wpX - prevX) * segDx + (wpY - prevY) * segDy) /
+                segLenSq,
+            0,
+            1,
+        )
+
+        if (t <= 0) {
+            return false
+        }
+
+        const closestX = prevX + t * segDx
+        const closestY = prevY + t * segDy
+        const distToSegment =
+            Phaser.Math.Distance.Between(
+                wpX,
+                wpY,
+                closestX,
+                closestY,
+            )
+
+        const threshold = Math.max(
+            1.5,
+            PATAGORAS_CONFIG.waypointReachDistance,
+        )
+
+        if (distToSegment > threshold) {
+            return false
+        }
+
+        const pastDot =
+            (curX - wpX) * segDx + (curY - wpY) * segDy
+
+        return pastDot >= 0
+    }
+
+    private resetStuckTracker(
+        x: number,
+        y: number,
+    ): void {
+        this.hasStuckSample = true
+        this.lastStuckCheckAt = this.scene.time.now
+        this.lastStuckCheckPosition.set(x, y)
     }
 
     private clearPath(): void {
@@ -744,5 +1007,11 @@ export class PatagorasAI {
         this.waypointIndex = 0
 
         this.nextPathUpdateAt = 0
+
+        this.hasStuckSample = false
+
+        this.hasLastPathTarget = false
+
+        this.hasPrevStepPosition = false
     }
 }
