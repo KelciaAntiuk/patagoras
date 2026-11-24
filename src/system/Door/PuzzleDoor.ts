@@ -124,13 +124,17 @@ export class PuzzleDoor extends Phaser.Physics.Arcade.Sprite {
 
     // ---------- Dica ----------
     this.dica = scene.add
-      .text(def.x, def.y - def.altura / 2 - 8, '', {
-        fontSize: '12px',
-        color: '#ffffff',
-        backgroundColor: '#000000aa',
-        padding: { x: 4, y: 2 },
+      // Mesmo estilo (pequeno) da dica dos puzzles, para caber na área iluminada
+      .text(def.x, def.y - def.altura / 2 - 2, '', {
+        fontFamily: '"Patrick Hand", Georgia, serif',
+        fontSize: '16px',
+        color: '#f4efe4',
+        backgroundColor: '#1a1208dd',
+        padding: { x: 6, y: 2 },
       })
       .setOrigin(0.5, 1)
+      .setScale(0.4)
+      .setResolution(3)
       .setDepth(depth + 7)
       .setVisible(false)
 

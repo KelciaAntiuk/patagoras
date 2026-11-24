@@ -1245,10 +1245,12 @@ export class GameScene
 
 
         // PUZZLE DENTRO DA SALA 2 (LIBERA A PORTA DA COZINHA)
+        // Fica na lateral esquerda da mesa do professor (mesa: x 452–468, y 324–356).
+        // Não pode ficar dentro da colisão da mesa, senão a linha de visão bloqueia a interação.
         this.puzzles
             .adicionarGatilho(
-                420,
-                338,
+                446,
+                344,
                 'sala-aula-2',
             )
 
