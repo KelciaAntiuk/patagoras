@@ -1145,9 +1145,10 @@ export class GameScene
                 WORLD_WIDTH,
                 WORLD_HEIGHT,
                 16,
-                collisionRects,
+                wallRects,
                 PATAGORAS_CONFIG
                     .pathfindingPadding,
+                furnitureRects,
             )
 
         // IA DO PATÁGORAS

@@ -38,6 +38,13 @@ export class PatagorasPathfinder {
         private readonly cellSize: number,
         wallRects: readonly WorldRect[],
         obstaclePadding = 0,
+        /**
+         * Móveis (camada 'colisao moveis'). Não ficam alinhados ao grid,
+         * então só bloqueiam a célula cujo centro cobrem. Se bloqueassem
+         * qualquer célula que tocam (como as paredes), fechariam as
+         * passagens entre mesas e o pato perderia o caminho até o jogador.
+         */
+        furnitureRects: readonly WorldRect[] = [],
     ) {
         const firstRect = wallRects[0]
 
@@ -61,6 +68,38 @@ export class PatagorasPathfinder {
             wallRects,
             obstaclePadding,
         )
+
+        this.blockFurnitureCells(
+            furnitureRects,
+        )
+    }
+
+    private blockFurnitureCells(
+        rects: readonly WorldRect[],
+    ): void {
+        for (const rect of rects) {
+            const left = Math.floor((rect.x - this.gridOffsetX) / this.cellSize)
+            const right = Math.floor((rect.x + rect.width - this.gridOffsetX) / this.cellSize)
+            const top = Math.floor((rect.y - this.gridOffsetY) / this.cellSize)
+            const bottom = Math.floor((rect.y + rect.height - this.gridOffsetY) / this.cellSize)
+
+            for (let gridY = top; gridY <= bottom; gridY++) {
+                for (let gridX = left; gridX <= right; gridX++) {
+                    const centerX = this.gridOffsetX + gridX * this.cellSize + this.cellSize / 2
+                    const centerY = this.gridOffsetY + gridY * this.cellSize + this.cellSize / 2
+
+                    const coversCenter =
+                        centerX >= rect.x &&
+                        centerX < rect.x + rect.width &&
+                        centerY >= rect.y &&
+                        centerY < rect.y + rect.height
+
+                    if (coversCenter && this.isInsideGrid(gridX, gridY)) {
+                        this.blocked.add(this.key(gridX, gridY))
+                    }
+                }
+            }
+        }
     }
 
     public setDynamicObstacle(
