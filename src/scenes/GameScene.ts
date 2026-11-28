@@ -1648,9 +1648,19 @@ export class GameScene
         // TOCA / PAUSA O SOM DOS PASSOS CONFORME MOVIMENTO
         this.atualizarSomPassos(direction.length() > 0)
 
-        // ATUALIZA IA DO PATÁGORAS
-        this.patagorasAI.update()
-        this.patagoras.updateAnimation()
+        // ATUALIZA IA DO PATÁGORAS (fica parado enquanto um puzzle estiver aberto)
+        if (puzzleAberto) {
+            this.patagoras.stop()
+            if (!this.patagoras.sprite.anims.isPaused) {
+                this.patagoras.sprite.anims.pause()
+            }
+        } else {
+            if (this.patagoras.sprite.anims.isPaused) {
+                this.patagoras.sprite.anims.resume()
+            }
+            this.patagorasAI.update()
+            this.patagoras.updateAnimation()
+        }
 
         // SONS DO PATÁGORAS (ritmo conforme velocidade, volume por distância)
         this.patagorasAudio?.update(
@@ -2968,6 +2978,17 @@ export class GameScene
                 this.mostrarStatus(
                         'Inventário cheio.',
                     )
+            },
+        )
+
+        this.puzzles.on(
+            PUZZLE_EVENTS
+                .OPENED,
+            () => {
+                this.patagoras.stop()
+                if (!this.patagoras.sprite.anims.isPaused) {
+                    this.patagoras.sprite.anims.pause()
+                }
             },
         )
 
